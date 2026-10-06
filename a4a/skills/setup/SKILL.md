@@ -1,5 +1,5 @@
 ---
-name: setup-agentic-project
+name: setup
 description: Prepare a project that builds on models for work by seam charter. Adds the rule to AGENTS.md and reports which stochastic seams have a charter. Run once per project.
 disable-model-invocation: true
 ---
@@ -19,7 +19,7 @@ A **stochastic seam** is a point where a model decides: an agent, a router, a pr
 
    A stochastic seam is a point where a model decides: an agent, a router, a prompt, a model judge. Each has a charter at `evals/<seam>/charter.md`: what the model is free to decide, what code constrains, and why.
 
-   - Read a seam's charter before changing the seam. If it has none, write one with the user first (the `grill-seam` skill does this).
+   - Read a seam's charter before changing the seam. If it has none, write one with the user first (the `charter` skill does this).
    - A decision the charter lists as free stays with the model. A constant, a default, a closed menu or a fixed reply taking it over moves the line.
    - A decision the charter lists as constrained stays in code. Asking the model to take it moves the line.
    - A change that would move the line stops there and goes to the user. They decide it; the charter changes in the same commit.

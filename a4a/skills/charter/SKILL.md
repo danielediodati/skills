@@ -1,5 +1,5 @@
 ---
-name: grill-seam
+name: charter
 description: Write the seam charter of a stochastic seam, a point where a model decides (an agent, a router, a prompt, a model judge). Use when such a point is being designed or specified, when its charter is missing, or when someone wants to move its line between freedom and constraint.
 ---
 
