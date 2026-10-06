@@ -1,0 +1,21 @@
+{
+  "name": "danielediodati",
+  "owner": {
+    "name": "Daniele Diodati"
+  },
+  "description": "Daniele Diodati's plugins for Claude Code.",
+  "plugins": [
+    {
+      "name": "a4a",
+      "source": "./a4a",
+      "description": "Agents for agents: agentic engineering of agentic systems. Skills for building, with coding agents, systems where a model decides, keeping freedom and constraint where you put them. Seam charters, eval-driven development.",
+      "category": "engineering",
+      "keywords": [
+        "agents",
+        "evals",
+        "eval-driven-development",
+        "llm"
+      ]
+    }
+  ]
+}
