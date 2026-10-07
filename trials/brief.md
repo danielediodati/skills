@@ -12,14 +12,14 @@ A seam is one Python function in which a language model's output passes through 
 
 ## What to deliver
 
-Four seams, in four different domains of your choosing. None about fitness or training.
+Four seams, in four different domains of your choosing.
 
 One directory per seam, named after it:
 
 ```
 <seam>/
-  <seam>.py
-  test_<seam>.py
+  seam.py
+  test.py
   README.md
   requests/
     01.md
