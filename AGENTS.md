@@ -4,7 +4,7 @@
 
 ### Issue tracker
 
-Issues live in GitHub Issues for `danielediodati/skills`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in the repo, as markdown files under `docs/work/<session>-<name>/issues/`, listed in `ROADMAP.md`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

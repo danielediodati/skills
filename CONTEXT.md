@@ -38,6 +38,7 @@ a4a/skills/<skill>/SKILL.md
 | **Plugin** | The installable bundle of this repo's skills. |
 | **Freedom** | What a seam leaves to the model's judgement. |
 | **Constraint** | What a seam fixes in code: what is allowed, in what order, within what limits. |
+| **Atomic seam** | A stochastic seam taken alone: one point where a model decides, with the code around it. Opposed to seams in cascade, where one seam's output feeds the next. The plugin is tested on atomic seams first. |
 | **Seam charter** | The written declaration of one stochastic seam: what is free, what is constrained and why, its target and budget, and the direction for its eval set (the rules the cases and graders will follow, not the cases themselves). Written by the `charter` skill. |
 | **Target** | The score a seam has to reach on its eval set. Declared in the charter as a goal before the eval set exists; corrected only by the user's decision once the first run shows the noise floor. A run below the target is a failure, and the only failure. |
 | **Programmatic drift** | Freedom the design gave to the model being taken over by code, without a decision to move it. The plugin's main target: it is what coding agents do by default. |
