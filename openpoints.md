@@ -14,6 +14,8 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 Still to check outside that session: load the plugin in a session (`claude --plugin-dir <repo>/a4a`) and see the skills appear. Only the manifests have been validated so far.
 
+Running the trial on this machine, learned in ticket 2: the auto mode classifier refuses to let an agent launch `claude -p` ("Create Unsafe Agents") or delete untracked files, even with the user's yes, so the user runs those by hand. Tickets 5 and 6 launch coding agents and will hit the same wall: plan them as commands for the user, or a permission rule, from the start. `python` is the Microsoft Store stub; tests run with `uv run --no-project python -m unittest`.
+
 After session 1, the held-out check: a real project with seams in cascade, replaying a commit that drifted.
 
 ## Writing, after the test
