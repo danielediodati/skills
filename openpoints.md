@@ -48,7 +48,6 @@ After session 1, the held-out check: a real project with seams in cascade, repla
 ## Repo
 
 - **One ADR is worth writing**: the central rule (freedom and constraint, symmetric) replacing the earlier one-way rule. It is the choice a later reader would find least obvious.
-- **`.vscode/`** is untracked on purpose: personal editor settings.
 
 ## Parked
 
