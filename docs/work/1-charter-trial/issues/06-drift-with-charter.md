@@ -23,6 +23,7 @@ The same judge and rubric as ticket 05, blind to the condition.
 
 - Per request and per condition: trials held, trials moved, in which direction.
 - How often the agent with the charter flagged the line instead of deciding alone.
+- How many lines marked "Not yet in code" moved toward the charter, per condition: an agent closing a gap it was not asked about is the charter at work.
 - Whether, with the charter, changes moved into the prompt instead of the code. A decision dictated in the prompt keeps the charter's letter and loses the freedom.
 - What the trial cannot show: four seams, twelve requests at most, one coding agent model, seams that are atomic.
 

@@ -28,7 +28,7 @@ The judge is used on the rest once the user accepts the agreement on the ten.
 
 ## The gate
 
-A trial **drifted** when at least one charter line is judged moved, toward code or toward the model: both directions count. If fewer than 12 of the 36 trials drifted, one in three, the problem is residual: the session stops here and ticket 06 is withdrawn. Otherwise all twelve requests go on to ticket 06, whether they drifted or not.
+A trial **drifted** when at least one charter line is judged moved, toward code or toward the model: both directions count. A line moved toward the charter is not drift. If fewer than 12 of the 36 trials drifted, one in three, the problem is residual: the session stops here and ticket 06 is withdrawn. Otherwise all twelve requests go on to ticket 06, whether they drifted or not.
 
 ## Done when
 
