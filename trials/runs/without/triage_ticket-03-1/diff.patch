@@ -1,0 +1,102 @@
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@
+ 
+ - `queue`: one of `billing`, `technical`, `account`, `shipping`, `general`
+ - `urgency`: one of `low`, `normal`, `high`, `urgent`; enterprise customers are raised one level
+-- `summary`: a single line of at most 120 characters, shown in the agents' ticket list
++- `summary`: a single line of at most 120 characters, shown in the agents' ticket list. A longer summary is shortened to whole sentences when the first ones fit, otherwise to whole words, and always ends with `…` so agents know there is more to read
+ - `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
+ 
+ Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
+--- a/seam.py
++++ b/seam.py
+@@ -20,6 +20,8 @@
+ {body}
+ """
+ 
++ELLIPSIS = "…"
++SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+ FIELD = re.compile(r"^\W*(queue|urgency|summary)\W*:\s*(.+)$", re.IGNORECASE)
+ 
+ 
+@@ -53,9 +55,36 @@
+     return {
+         "queue": queue,
+         "urgency": urgency,
+-        "summary": summary[:MAX_SUMMARY_CHARS],
++        "summary": _shorten(summary, MAX_SUMMARY_CHARS),
+         "respond_within_hours": RESPOND_WITHIN_HOURS[urgency],
+     }
++
++
++def _shorten(text, limit):
++    """Fit `text` in `limit` characters, never ending mid-word.
++
++    A text that had to be shortened ends with an ellipsis. Whole leading
++    sentences are kept when they fit, otherwise whole words.
++    """
++    if len(text) <= limit:
++        return text
++    room = limit - len(ELLIPSIS)
++
++    kept = ""
++    for sentence in SENTENCE_END.split(text):
++        candidate = f"{kept} {sentence}" if kept else sentence
++        if len(candidate) > room:
++            break
++        kept = candidate
++    if kept:
++        return kept + ELLIPSIS
++
++    cut = text[:room + 1]
++    if not text[room].isspace():
++        # The cut falls inside a word: drop that word.
++        head, space, _ = cut.rpartition(" ")
++        cut = head if space else cut[:room]
++    return cut.rstrip().rstrip(",;:-") + ELLIPSIS
+ 
+ 
+ def _parse_fields(answer):
+--- a/test.py
++++ b/test.py
+@@ -77,10 +77,35 @@
+         self.assertEqual(result["urgency"], "urgent")
+         self.assertEqual(result["respond_within_hours"], 1)
+ 
+-    def test_summary_is_one_line_and_capped(self):
+-        result = triage("queue: billing\nurgency: low\nsummary:  a   b " + "c" * 200)
+-        self.assertTrue(result["summary"].startswith("a b ccc"))
+-        self.assertEqual(len(result["summary"]), 120)
++    def test_summary_is_one_line(self):
++        result = triage("queue: billing\nurgency: low\nsummary:  a   b  c")
++        self.assertEqual(result["summary"], "a b c")
++
++    def test_summary_that_fits_is_untouched(self):
++        text = "word " * 23 + "word"  # 119 characters
++        result = triage("queue: billing\nurgency: low\nsummary: " + text)
++        self.assertEqual(result["summary"], text)
++
++    def test_long_summary_is_cut_at_a_word_and_marked(self):
++        text = (
++            "The customer would like to keep the subscription for the three "
++            "seats used by the design team but wants to cancel the remaining ones"
++        )
++        summary = triage("queue: billing\nurgency: low\nsummary: " + text)["summary"]
++        self.assertLessEqual(len(summary), 120)
++        self.assertTrue(summary.endswith("…"))
++        self.assertTrue(text.startswith(summary[:-1]))
++        self.assertIn(text[len(summary) - 1], " ")
++
++    def test_long_summary_keeps_whole_sentences(self):
++        first = "Replacement router arrived and works."
++        second = "Customer asks us not to close the ticket until the old one has been returned to us."
++        summary = triage(f"queue: shipping\nurgency: low\nsummary: {first} {second} More.")["summary"]
++        self.assertEqual(summary, first + "…")
++
++    def test_unbroken_text_is_hard_cut_and_marked(self):
++        summary = triage("queue: billing\nurgency: low\nsummary: " + "c" * 200)["summary"]
++        self.assertEqual(summary, "c" * 119 + "…")
+ 
+     def test_only_the_start_of_a_long_body_is_sent(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")

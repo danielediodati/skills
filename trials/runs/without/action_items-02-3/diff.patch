@@ -1,0 +1,100 @@
+--- a/seam.py
++++ b/seam.py
+@@ -2,14 +2,14 @@
+ 
+ import re
+ from dataclasses import dataclass
+-from datetime import date
++from datetime import date, timedelta
+ from typing import Callable, List, Optional, Sequence
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+ 
+ PROMPT = """\
+-Below are the notes of a meeting held on {meeting_date}.
++Below are the notes of a meeting held on {meeting_date} ({meeting_weekday}).
+ The people present were: {attendees}.
+ 
+ List every action item agreed in the meeting: something a person committed
+@@ -23,6 +23,11 @@
+ - owner: the name of the person responsible, as written in the list above,
+   or "none" if nobody took it.
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
++  A day of the week is a deadline. Use this table, do not work it out
++  yourself:
++{weekdays}
++  So "by Friday" uses the "by" column and "by next Friday" the "next" column.
++  An explicit date in the notes is used as written.
+ 
+ If there are no action items, write only: NONE
+ 
+@@ -59,6 +64,8 @@
+ 
+     prompt = PROMPT.format(
+         meeting_date=meeting_date.isoformat(),
++        meeting_weekday=_WEEKDAYS[meeting_date.weekday()],
++        weekdays=_weekday_table(meeting_date),
+         attendees=", ".join(attendees),
+         notes=notes.strip(),
+     )
+@@ -88,6 +95,31 @@
+     return items[:MAX_ITEMS]
+ 
+ 
++_WEEKDAYS = [
++    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
++]
++
++
++def _weekday_dates(meeting_date: date, weekday: int):
++    """Return (first such day after the meeting, that day in the following week).
++
++    A meeting held on the day itself points a week ahead, never at itself.
++    "Next" means the day in the calendar week (Monday to Sunday) after the
++    meeting's own week.
++    """
++    soon = meeting_date + timedelta(days=(weekday - meeting_date.weekday() - 1) % 7 + 1)
++    next_monday = meeting_date + timedelta(days=7 - meeting_date.weekday())
++    return soon, next_monday + timedelta(days=weekday)
++
++
++def _weekday_table(meeting_date: date) -> str:
++    rows = []
++    for weekday, name in enumerate(_WEEKDAYS):
++        soon, following = _weekday_dates(meeting_date, weekday)
++        rows.append(f"  {name}: by = {soon.isoformat()}, next = {following.isoformat()}")
++    return "\n".join(rows)
++
++
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
+ 
+--- a/test.py
++++ b/test.py
+@@ -38,6 +38,25 @@
+         model = FakeModel("Do something | Ana Ruiz | none")
+         self.assertEqual(extract_action_items("  \n", ATTENDEES, MEETING, model), [])
+         self.assertEqual(model.prompts, [])
++
++
++class WeekdayPromptTest(unittest.TestCase):
++    def prompt_for(self, meeting):
++        model = FakeModel("NONE")
++        extract_action_items(NOTES, ATTENDEES, meeting, model)
++        return model.prompts[0]
++
++    def test_prompt_resolves_weekdays_for_a_tuesday_meeting(self):
++        prompt = self.prompt_for(MEETING)
++        self.assertIn("(Tuesday)", prompt)
++        self.assertIn("Friday: by = 2026-03-06, next = 2026-03-13", prompt)
++        self.assertIn("Wednesday: by = 2026-03-04, next = 2026-03-11", prompt)
++        self.assertIn("Tuesday: by = 2026-03-10, next = 2026-03-10", prompt)
++
++    def test_same_weekday_as_the_meeting_means_a_week_later(self):
++        prompt = self.prompt_for(date(2026, 3, 6))  # a Friday
++        self.assertIn("Friday: by = 2026-03-13, next = 2026-03-13", prompt)
++        self.assertIn("Monday: by = 2026-03-09, next = 2026-03-09", prompt)
+ 
+ 
+ class ParsingTest(unittest.TestCase):

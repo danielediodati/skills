@@ -1,0 +1,85 @@
+--- a/README.md
++++ b/README.md
+@@ -9,7 +9,7 @@
+ The model reads the notes and writes the items. The code decides what is kept:
+ 
+ - lines of the answer that are not `task | owner | due` are skipped;
+-- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
++- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it. A part of a name ("Priya") counts if it fits exactly one attendee; if it fits two ("Tom" with Tom Becker and Tom Haas) the owner is left as `None`. Otherwise the item stays, with `owner` set to `None`;
+ - a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -64,7 +64,6 @@
+     )
+     answer = model(prompt)
+ 
+-    by_name = {_key(name): name for name in attendees}
+     items: List[ActionItem] = []
+     seen = set()
+     for line in answer.splitlines():
+@@ -76,7 +75,7 @@
+         task = _clean_task(fields[0])
+         if not task or _key(task) == "task":  # empty, or the header echoed back
+             continue
+-        owner = by_name.get(_key(fields[1]))
++        owner = _resolve_owner(fields[1], attendees)
+         due = _parse_due(fields[2], meeting_date)
+         if (_key(task), owner) in seen:
+             continue
+@@ -90,6 +89,30 @@
+ 
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
++
++
++def _resolve_owner(text: str, attendees: Sequence[str]) -> Optional[str]:
++    """Match `text` to an attendee: a full name, or a part of a name (such as
++    a first name) that fits exactly one attendee. Ambiguous or unknown gives None.
++    """
++    key = _key(text)
++    if key in _EMPTY:
++        return None
++    for name in attendees:
++        if _key(name) == key:
++            return name
++    wanted = key.split()
++    matches = [
++        name for name in attendees if _contains_words(_key(name).split(), wanted)
++    ]
++    # Two attendees spelled the same way are still one candidate name.
++    if len({_key(name) for name in matches}) == 1:
++        return matches[0]
++    return None
++
++
++def _contains_words(words: List[str], wanted: List[str]) -> bool:
++    return all(word in words for word in wanted)
+ 
+ 
+ def _clean_task(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -93,6 +93,21 @@
+         items = run("Approve the budget | Marta Olsen | none")
+         self.assertEqual(items, [ActionItem("Approve the budget", None, None)])
+ 
++    def test_first_name_alone_resolves_to_the_one_attendee_with_it(self):
++        items = run("Order the badges | Priya | none\nBook the room | tom | none")
++        self.assertEqual([i.owner for i in items], ["Priya Raman", "Tom Becker"])
++
++    def test_first_name_shared_by_two_attendees_stays_unassigned(self):
++        attendees = ["Tom Becker", "Tom Haas", "Priya Raman"]
++        items = extract_action_items(
++            "x", attendees, MEETING, FakeModel("Book the room | Tom | none")
++        )
++        self.assertIsNone(items[0].owner)
++        items = extract_action_items(
++            "x", attendees, MEETING, FakeModel("Book the room | Tom Haas | none")
++        )
++        self.assertEqual(items[0].owner, "Tom Haas")
++
+     def test_explicit_none_owner(self):
+         self.assertIsNone(run("Find a caterer | none | none")[0].owner)
+ 

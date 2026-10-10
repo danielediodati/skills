@@ -1,0 +1,82 @@
+--- a/seam.py
++++ b/seam.py
+@@ -14,6 +14,35 @@
+ """
+ 
+ LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
++
++# Amounts in a reason that read as a price: next to a currency, written with two
++# decimals, or right after a word like "at" or "only" (and not followed by a unit).
++_CURRENCY = r"(?:€|\$|£|\b(?:eur|euros?|usd|dollars?|gbp|pounds?)\b)"
++_NUMBER = r"(\d+(?:[.,]\d+)*)(?!\d|[.,]\d)"
++_PRICE_MENTIONS = [
++    re.compile(_CURRENCY + r"\s*" + _NUMBER, re.I),
++    re.compile(_NUMBER + r"\s*" + _CURRENCY, re.I),
++    re.compile(r"(?<![\d.,])(\d+[.,]\d{2})(?!\d)"),
++    re.compile(r"\b(?:at|for|only|just|costs?|price[ds]?(?:\s+at)?)\s+"
++               + _NUMBER + r"(?!\s*[a-z-])", re.I),
++]
++
++
++def _to_amount(text):
++    """Parse "1,299.00", "14,90" or "4" into a float."""
++    match = re.search(r"[.,](\d{1,2})$", text)
++    if match:
++        whole = re.sub(r"[.,]", "", text[:match.start()])
++        return float(f"{whole}.{match.group(1)}")
++    return float(re.sub(r"[.,]", "", text))
++
++
++def _quotes_other_price(reason, price):
++    for pattern in _PRICE_MENTIONS:
++        for text in pattern.findall(reason):
++            if abs(_to_amount(text) - price) >= 0.005:
++                return True
++    return False
+ 
+ 
+ def recommend_products(query, catalog, model, limit=5):
+@@ -48,12 +77,16 @@
+             continue
+         seen.add(product_id)
+         product = available[product_id]
++        reason = " ".join(reason.split())[:MAX_REASON_CHARS]
++        # A reason quoting a price other than the real one is worse than none.
++        if _quotes_other_price(reason, product["price"]):
++            reason = ""
+         picks.append({
+             "id": product_id,
+             "name": product["name"],
+             "price": product["price"],
+             "rating": product["rating"],
+-            "reason": " ".join(reason.split())[:MAX_REASON_CHARS],
++            "reason": reason,
+         })
+         if len(picks) == limit:
+             break
+--- a/test.py
++++ b/test.py
+@@ -79,6 +79,23 @@
+         result = recommend("H-100")
+         self.assertEqual(result[0]["reason"], "")
+ 
++    def test_reason_quoting_a_wrong_price_is_blanked_but_product_kept(self):
++        for reason in ["A bargain at only €14.90", "Just $4", "only 15 euros",
++                       "Cheap, at 14,90", "Costs 14.90 EUR", "just for 15"]:
++            result = recommend("H-200 | " + reason)
++            self.assertEqual([p["id"] for p in result], ["H-200"], reason)
++            self.assertEqual(result[0]["reason"], "", reason)
++
++    def test_reason_quoting_the_right_price_is_kept(self):
++        for reason in ["Solid choice at 19.90", "Only €19.90", "Just $19.9", "at 19,90 EUR"]:
++            self.assertEqual(recommend("H-200 | " + reason)[0]["reason"], reason)
++        self.assertEqual(recommend("H-100 | Great at 129")[0]["reason"], "Great at 129")
++
++    def test_reason_with_other_numbers_is_kept(self):
++        for reason in ["2 m long", "30-hour battery", "Rated 4.5 stars", "Only 2 m of cable",
++                       "Just 30 hours of play", "Top 3 pick for 2 people"]:
++            self.assertEqual(recommend("H-200 | " + reason)[0]["reason"], reason)
++
+     def test_blank_query_returns_nothing_without_asking_the_model(self):
+         model = FakeModel("H-100 | Best sound")
+         self.assertEqual(recommend_products("   ", CATALOG, model), [])

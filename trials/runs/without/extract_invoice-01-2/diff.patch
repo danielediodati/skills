@@ -1,0 +1,138 @@
+--- a/README.md
++++ b/README.md
+@@ -8,4 +8,6 @@
+ 
+ If the model's answer can't be read, or a field is missing or malformed, the function raises `InvoiceError` with a message naming the field.
+ 
++Amounts may be written as suppliers print them: thousands separators (`.` `,` `'` or a space), a decimal comma or point, and a currency symbol or code before or after (`1.234,56`, `£1,234.56`, `1'050.00 CHF`). An amount whose separators can be read two ways, such as `1.234` or `1,234` (one thousand two hundred thirty-four, or one and 234 thousandths), is refused with "is ambiguous" rather than guessed. Numbers that arrive as JSON numbers are taken as they are.
++
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -91,11 +91,32 @@
+     return value.strip()
+ 
+ 
++class _Ambiguous(Exception):
++    """The separators in an amount can be read two ways."""
++
++
++# A currency symbol or code: "£", "CHF", "Fr.", "US$".
++_CURRENCY = r"(?:[^\W\d_]{1,3}[^\w\s.,'+\-]|[^\W\d_]{1,3}\.?|[^\w\s.,'+\-]{1,3})"
++_AMOUNT = re.compile(
++    rf"(?P<sign1>[-+])?\s*(?:{_CURRENCY}\s*)?(?P<sign2>[-+])?\s*"
++    rf"(?P<core>[\d.,' ]*\d[\d.,' ]*?)\s*(?:{_CURRENCY})?"
++)
++_EXPONENT = re.compile(r"[-+]?\d+(?:\.\d+)?[eE][-+]?\d+")
++_SEPARATORS = str.maketrans({
++    " ": " ", " ": " ", " ": " ", "’": "'", "ʼ": "'",
++})
++
++
+ def _number(value, label):
+     if value is None or isinstance(value, bool):
+         raise InvoiceError(f"{label} is missing")
+     try:
+-        number = Decimal(str(value).strip())
++        if isinstance(value, str):
++            number = _written_amount(value)
++        else:
++            number = Decimal(str(value).strip())
++    except _Ambiguous:
++        raise InvoiceError(f"{label} is ambiguous: {value!r}") from None
+     except InvalidOperation:
+         raise InvoiceError(f"{label} is not a number: {value!r}") from None
+     if not number.is_finite():
+@@ -103,5 +124,47 @@
+     return number
+ 
+ 
++def _written_amount(text):
++    """Read an amount as a supplier writes it: "1.234,56", "£1,234.56", "1'050.00 CHF".
++
++    Raises InvalidOperation when it is not an amount, _Ambiguous when the
++    separators could mean two different amounts (such as "1.234").
++    """
++    text = text.translate(_SEPARATORS).strip()
++    if _EXPONENT.fullmatch(text):
++        return Decimal(text)
++    match = _AMOUNT.fullmatch(text)
++    if not match or (match["sign1"] and match["sign2"]):
++        raise InvalidOperation
++    sign = match["sign1"] or match["sign2"] or ""
++    core = match["core"].strip()
++
++    seps = re.findall(r"[.,' ]", core)
++    pieces = re.split(r"[.,' ]", core)
++    frac = ""
++    if not seps:
++        whole = pieces
++    elif seps[-1] in ".," and seps.count(seps[-1]) == 1 and len(seps) > 1:
++        # "1,234.56", "1.234,56", "1 234,56": the last separator is the decimal one.
++        if len(set(seps[:-1])) != 1:
++            raise InvalidOperation
++        whole, frac = pieces[:-1], pieces[-1]
++    elif len(seps) == 1 and seps[0] in ".,":
++        whole, frac = pieces[:1], pieces[1]
++        if len(frac) == 3 and whole[0] not in ("", "0") and len(whole[0]) <= 3:
++            raise _Ambiguous  # "1.234" is 1234 or 1.234
++    else:
++        # Only grouping separators: "1,234,567", "1'050", "1 234".
++        if len(set(seps)) != 1:
++            raise InvalidOperation
++        whole = pieces
++    if "" in pieces[1:]:
++        raise InvalidOperation
++    if len(whole) > 1 and not (1 <= len(whole[0]) <= 3 and whole[0] != "0"
++                               and all(len(group) == 3 for group in whole[1:])):
++        raise InvalidOperation
++    return Decimal(f"{sign}{''.join(whole) or '0'}" + (f".{frac}" if frac else ""))
++
++
+ def _cents(amount):
+     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+--- a/test.py
++++ b/test.py
+@@ -100,6 +100,42 @@
+         with self.assertRaisesRegex(InvoiceError, "total is not a number"):
+             extract(total="three hundred")
+ 
++    def test_amounts_as_suppliers_write_them_are_read(self):
++        cases = {
++            "1.234,56": "1234.56",
++            "1,234.56": "1234.56",
++            "£1,234.56": "1234.56",
++            "1'050.00 CHF": "1050.00",
++            "EUR 1 234,56": "1234.56",
++            "€ 1.234.567,89": "1234567.89",
++            "1,234,567": "1234567",
++            "1’050": "1050",
++            "-£1,234.56": "-1234.56",
++            "12,5": "12.5",
++            "0.335": "0.335",
++            "1234.567": "1234.567",
++            "15.00": "15.00",
++            "US$ 99.90": "99.90",
++        }
++        for written, expected in cases.items():
++            with self.subTest(written):
++                result = extract(lines=[{"description": "x", "quantity": 1,
++                                         "unit_price": written}])
++                self.assertEqual(result["lines"][0]["unit_price"], Decimal(expected))
++
++    def test_ambiguous_amount_is_an_error(self):
++        for written in ("1.234", "1,234", "12,345", "123.456 EUR"):
++            with self.subTest(written):
++                with self.assertRaisesRegex(InvoiceError, "total is ambiguous"):
++                    extract(total=written)
++
++    def test_malformed_amounts_are_errors(self):
++        for written in ("1,23,456", "1.234,56,7", "1,234.56.78", "12 34", "1.", "--5",
++                        "1.2.3", "total 12", "1,234.567,89"):
++            with self.subTest(written):
++                with self.assertRaises(InvoiceError):
++                    extract(total=written)
++
+     def test_missing_quantity_is_an_error(self):
+         lines = [{"description": "Delivery", "unit_price": 15}]
+         with self.assertRaisesRegex(InvoiceError, "line 1 quantity is missing"):

@@ -1,0 +1,199 @@
+--- a/README.md
++++ b/README.md
+@@ -4,12 +4,12 @@
+ 
+ **In:** the notes as free text, the names of the people who were in the meeting, the date of the meeting, and a model (any callable that takes a prompt string and returns a string).
+ 
+-**Out:** a list of at most 10 `ActionItem`s, each with a short `task`, an `owner` and a `due` date, ordered by deadline with undated items last.
++**Out:** a list of at most 10 `ActionItem`s, each with a short `task`, its `owners` (a tuple of names; two people who took a task together are both listed on the one item) and a `due` date, ordered by deadline with undated items last.
+ 
+ The model reads the notes and writes the items. The code decides what is kept:
+ 
+ - lines of the answer that are not `task | owner | due` are skipped;
+-- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
++- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; names that are not attendees are dropped, and the item stays even if `owners` ends up empty;
+ - a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
+ 
+@@ -23,7 +23,7 @@
+     meeting_date=date(2026, 3, 3),
+     model=my_model,
+ )
+-# [ActionItem(task='Send the revised quote to Halden', owner='Ana Ruiz', due=date(2026, 3, 6))]
++# [ActionItem(task='Send the revised quote to Halden', owners=('Ana Ruiz',), due=date(2026, 3, 6))]
+ ```
+ 
+ Run the tests from this directory with `python -m unittest`.
+--- a/seam.py
++++ b/seam.py
+@@ -3,7 +3,7 @@
+ import re
+ from dataclasses import dataclass
+ from datetime import date
+-from typing import Callable, List, Optional, Sequence
++from typing import Callable, List, Optional, Sequence, Tuple
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+@@ -21,7 +21,8 @@
+ 
+ - task: a short imperative sentence, e.g. "Send the revised quote to Halden".
+ - owner: the name of the person responsible, as written in the list above,
+-  or "none" if nobody took it.
++  or "none" if nobody took it. If several people took it together, write all
++  their names separated by ";", e.g. "Ana Ruiz; Tom Becker".
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
+ 
+ If there are no action items, write only: NONE
+@@ -31,13 +32,14 @@
+ """
+ 
+ _EMPTY = {"", "none", "n/a", "-", "?", "tbd", "unassigned"}
++_OWNER_SEP = re.compile(r"\s*(?:;|,|&|/|\+|\band\b)\s*", re.IGNORECASE)
+ _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
+ 
+ 
+ @dataclass(frozen=True)
+ class ActionItem:
+     task: str
+-    owner: Optional[str]  # one of the attendees, spelled as the caller gave it
++    owners: Tuple[str, ...]  # attendees, spelled as the caller gave them; may be empty
+     due: Optional[date]
+ 
+ 
+@@ -50,9 +52,10 @@
+     """Return the action items found in `notes`, soonest deadline first.
+ 
+     `model` takes a prompt and returns text. Its answer is not trusted: lines
+-    that are not in the requested form are skipped, an owner who was not in
+-    the meeting becomes None, and so does a deadline that is not a real date
+-    or falls before the meeting.
++    that are not in the requested form are skipped, owners who were not in
++    the meeting are left out of `owners` (a task shared by two people keeps
++    both, as one item), and a deadline that is not a real date or falls before
++    the meeting becomes None.
+     """
+     if not notes.strip():
+         return []
+@@ -76,12 +79,12 @@
+         task = _clean_task(fields[0])
+         if not task or _key(task) == "task":  # empty, or the header echoed back
+             continue
+-        owner = by_name.get(_key(fields[1]))
++        owners = _parse_owners(fields[1], by_name)
+         due = _parse_due(fields[2], meeting_date)
+-        if (_key(task), owner) in seen:
++        if (_key(task), owners) in seen:
+             continue
+-        seen.add((_key(task), owner))
+-        items.append(ActionItem(task, owner, due))
++        seen.add((_key(task), owners))
++        items.append(ActionItem(task, owners, due))
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+@@ -90,6 +93,18 @@
+ 
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
++
++
++def _parse_owners(text: str, by_name: dict) -> Tuple[str, ...]:
++    """The attendees named in `text`, in order; anyone else is ignored."""
++    if _key(text) in by_name:  # the whole field is one name, whatever it contains
++        return (by_name[_key(text)],)
++    owners: List[str] = []
++    for part in _OWNER_SEP.split(text):
++        name = by_name.get(_key(part))
++        if name is not None and name not in owners:
++            owners.append(name)
++    return tuple(owners)
+ 
+ 
+ def _clean_task(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -49,8 +49,8 @@
+         self.assertEqual(
+             items,
+             [
+-                ActionItem("Send the quote to Halden", "Ana Ruiz", date(2026, 3, 6)),
+-                ActionItem("Look into the venue", "Tom Becker", None),
++                ActionItem("Send the quote to Halden", ("Ana Ruiz",), date(2026, 3, 6)),
++                ActionItem("Look into the venue", ("Tom Becker",), None),
+             ],
+         )
+ 
+@@ -66,7 +66,7 @@
+             "Order the badges | Priya Raman | 2026-03-10\n"
+         )
+         self.assertEqual(
+-            items, [ActionItem("Order the badges", "Priya Raman", date(2026, 3, 10))]
++            items, [ActionItem("Order the badges", ("Priya Raman",), date(2026, 3, 10))]
+         )
+ 
+     def test_bullets_numbering_and_stray_spacing_are_tolerated(self):
+@@ -81,20 +81,48 @@
+     def test_task_may_contain_a_pipe(self):
+         items = run("Rename the A|B test report | Ana Ruiz | none")
+         self.assertEqual(items[0].task, "Rename the A|B test report")
+-        self.assertEqual(items[0].owner, "Ana Ruiz")
++        self.assertEqual(items[0].owners, ("Ana Ruiz",))
+ 
+ 
+ class OwnerTest(unittest.TestCase):
+     def test_owner_is_returned_as_the_caller_spelled_it(self):
+         items = run("Book the room | tom  BECKER | none")
+-        self.assertEqual(items[0].owner, "Tom Becker")
++        self.assertEqual(items[0].owners, ("Tom Becker",))
+ 
+     def test_owner_who_was_not_in_the_meeting_is_dropped_but_item_kept(self):
+         items = run("Approve the budget | Marta Olsen | none")
+-        self.assertEqual(items, [ActionItem("Approve the budget", None, None)])
++        self.assertEqual(items, [ActionItem("Approve the budget", (), None)])
+ 
+     def test_explicit_none_owner(self):
+-        self.assertIsNone(run("Find a caterer | none | none")[0].owner)
++        self.assertEqual(run("Find a caterer | none | none")[0].owners, ())
++
++
++class SharedOwnerTest(unittest.TestCase):
++    def test_two_owners_stay_one_item(self):
++        items = run("Draft the supplier shortlist | Ana Ruiz; Tom Becker | 2026-03-12")
++        self.assertEqual(
++            items,
++            [ActionItem("Draft the supplier shortlist", ("Ana Ruiz", "Tom Becker"), date(2026, 3, 12))],
++        )
++
++    def test_other_separators_and_spelling_are_tolerated(self):
++        for field in ("ana ruiz and Tom  Becker", "Ana Ruiz, Tom Becker", "Ana Ruiz & Tom Becker"):
++            with self.subTest(field=field):
++                items = run(f"Draft the shortlist | {field} | none")
++                self.assertEqual(items[0].owners, ("Ana Ruiz", "Tom Becker"))
++
++    def test_unknown_co_owner_is_dropped_known_one_kept(self):
++        items = run("Draft the shortlist | Ana Ruiz; Marta Olsen | none")
++        self.assertEqual(items[0].owners, ("Ana Ruiz",))
++
++    def test_same_person_twice_is_listed_once(self):
++        items = run("Draft the shortlist | Ana Ruiz; Ana Ruiz | none")
++        self.assertEqual(items[0].owners, ("Ana Ruiz",))
++
++    def test_prompt_explains_how_to_write_shared_owners(self):
++        model = FakeModel("NONE")
++        extract_action_items(NOTES, ATTENDEES, MEETING, model)
++        self.assertIn("separated by", model.prompts[0])
+ 
+ 
+ class DueTest(unittest.TestCase):
+@@ -132,8 +160,8 @@
+             "Book the room | Ana Ruiz | none\n"
+         )
+         self.assertEqual(
+-            [(item.owner, item.due) for item in items],
+-            [("Tom Becker", date(2026, 3, 5)), ("Ana Ruiz", None)],
++            [(item.owners, item.due) for item in items],
++            [(("Tom Becker",), date(2026, 3, 5)), (("Ana Ruiz",), None)],
+         )
+ 
+     def test_list_is_capped_keeping_the_soonest_deadlines(self):

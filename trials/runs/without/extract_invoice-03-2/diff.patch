@@ -1,0 +1,274 @@
+--- a/README.md
++++ b/README.md
+@@ -4,8 +4,16 @@
+ 
+ `extract_invoice(text, model)` takes the plain text of one invoice (from a PDF or an email) and a model, any callable that takes a prompt string and returns a string. The model reads the invoice and reports the supplier, invoice number, issue date, currency, the invoice lines and the total.
+ 
+-The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
++The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total`, `status` and `problems`. Amounts are `Decimal`, rounded to cents.
+ 
+-If the model's answer can't be read, or a field is missing or malformed, the function raises `InvoiceError` with a message naming the field.
++`status` is one of:
++
++- `ok`: everything was read and the lines add up to the total.
++- `mismatch`: everything was read but the lines don't add up to the total. Goes to a clerk.
++- `incomplete`: something could not be read. Goes to a clerk; must never go into the ledger as it is.
++
++When `status` is `incomplete`, whatever could be read is still returned. Each missing or unreadable field is `None` (for a line, its `quantity`, `unit_price` and `amount`; `lines_total` is `None` unless every line has an amount), and `problems` lists them, for example `{"field": "issue_date", "reason": "not a date", "value": "0Z/10/2026"}`. `field` is a top-level key, `lines`, or `line N quantity` / `line N unit_price`. `reason` is `missing`, `not a date`, `not a number`, `not a three-letter code` or `not an object`; `value` is what the model returned (absent when `missing`). `problems` is empty for `ok` and `mismatch`. Check `status == "ok"` before posting to the ledger.
++
++`InvoiceError` is raised only when nothing usable comes out: empty text, an answer that isn't a JSON object, or no field at all that could be read.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -26,40 +26,53 @@
+     """Return the invoice in `text` as a dict, with the total checked against the lines.
+ 
+     `model` is a callable taking a prompt string and returning a string.
++
++    A field that is missing or unreadable comes back as None and is listed in
++    `problems`; the status is then "incomplete". InvoiceError is raised only
++    when nothing usable can be read at all.
+     """
+     if not text.strip():
+         raise InvoiceError("empty invoice text")
+     data = _load_json(model(PROMPT.format(text=text)))
+ 
+-    supplier = _text(data, "supplier")
+-    invoice_number = _text(data, "invoice_number")
+-    raw_date = _text(data, "issue_date")
+-    try:
+-        issue_date = date.fromisoformat(raw_date)
+-    except ValueError:
+-        raise InvoiceError(f"issue_date is not a date: {raw_date!r}") from None
+-    currency = _text(data, "currency").upper()
+-    if not re.fullmatch(r"[A-Z]{3}", currency):
+-        raise InvoiceError(f"currency is not a three-letter code: {currency!r}")
++    problems = []
+ 
++    def read(field, reader):
++        raw = data.get(field)
++        try:
++            return reader(raw)
++        except _Unreadable as error:
++            problems.append(_problem(field, raw, error))
++            return None
++
++    supplier = read("supplier", _text)
++    invoice_number = read("invoice_number", _text)
++    issue_date = read("issue_date", _date)
++    currency = read("currency", _currency)
++    total = read("total", lambda raw: _cents(_number(raw)))
++
++    lines = []
+     raw_lines = data.get("lines")
+     if not isinstance(raw_lines, list) or not raw_lines:
+-        raise InvoiceError("no invoice lines")
+-    lines = []
+-    for number, raw in enumerate(raw_lines, start=1):
+-        if not isinstance(raw, dict):
+-            raise InvoiceError(f"line {number} is not an object")
+-        quantity = _number(raw.get("quantity"), f"line {number} quantity")
+-        unit_price = _number(raw.get("unit_price"), f"line {number} unit_price")
+-        lines.append({
+-            "description": str(raw.get("description") or "").strip(),
+-            "quantity": quantity,
+-            "unit_price": unit_price,
+-            "amount": _cents(quantity * unit_price),
+-        })
++        problems.append(_problem("lines", raw_lines, _Unreadable("missing")))
++    else:
++        for number, raw in enumerate(raw_lines, start=1):
++            lines.append(_line(number, raw, problems))
+ 
+-    total = _cents(_number(data.get("total"), "total"))
+-    lines_total = sum((line["amount"] for line in lines), Decimal("0"))
++    amounts = [line["amount"] for line in lines]
++    lines_complete = bool(lines) and all(amount is not None for amount in amounts)
++    lines_total = sum(amounts, Decimal("0")) if lines_complete else None
++
++    readable = [supplier, invoice_number, issue_date, currency, total, *amounts]
++    if all(value is None for value in readable):
++        raise InvoiceError(
++            "nothing usable in the invoice: " + ", ".join(p["field"] for p in problems)
++        )
++
++    if problems:
++        status = "incomplete"
++    else:
++        status = "ok" if lines_total == total else "mismatch"
+     return {
+         "supplier": supplier,
+         "invoice_number": invoice_number,
+@@ -68,8 +81,37 @@
+         "lines": lines,
+         "lines_total": lines_total,
+         "total": total,
+-        "status": "ok" if lines_total == total else "mismatch",
++        "status": status,
++        "problems": problems,
+     }
++
++
++class _Unreadable(Exception):
++    """One field is missing (reason "missing") or malformed (any other reason)."""
++
++
++def _problem(field, raw, error):
++    reason = str(error)
++    problem = {"field": field, "reason": reason}
++    if reason != "missing":
++        problem["value"] = raw
++    return problem
++
++
++def _line(number, raw, problems):
++    line = {"description": None, "quantity": None, "unit_price": None, "amount": None}
++    if not isinstance(raw, dict):
++        problems.append(_problem(f"line {number}", raw, _Unreadable("not an object")))
++        return line
++    line["description"] = str(raw.get("description") or "").strip()
++    for key in ("quantity", "unit_price"):
++        try:
++            line[key] = _number(raw.get(key))
++        except _Unreadable as error:
++            problems.append(_problem(f"line {number} {key}", raw.get(key), error))
++    if line["quantity"] is not None and line["unit_price"] is not None:
++        line["amount"] = _cents(line["quantity"] * line["unit_price"])
++    return line
+ 
+ 
+ def _load_json(answer):
+@@ -84,22 +126,35 @@
+     return data
+ 
+ 
+-def _text(data, key):
+-    value = data.get(key)
++def _text(value):
+     if not isinstance(value, str) or not value.strip():
+-        raise InvoiceError(f"{key} is missing")
++        raise _Unreadable("missing")
+     return value.strip()
+ 
+ 
+-def _number(value, label):
++def _date(value):
++    try:
++        return date.fromisoformat(_text(value))
++    except ValueError:
++        raise _Unreadable("not a date") from None
++
++
++def _currency(value):
++    code = _text(value).upper()
++    if not re.fullmatch(r"[A-Z]{3}", code):
++        raise _Unreadable("not a three-letter code")
++    return code
++
++
++def _number(value):
+     if value is None or isinstance(value, bool):
+-        raise InvoiceError(f"{label} is missing")
++        raise _Unreadable("missing")
+     try:
+         number = Decimal(str(value).strip())
+     except InvalidOperation:
+-        raise InvoiceError(f"{label} is not a number: {value!r}") from None
++        raise _Unreadable("not a number") from None
+     if not number.is_finite():
+-        raise InvoiceError(f"{label} is not a number: {value!r}")
++        raise _Unreadable("not a number")
+     return number
+ 
+ 
+--- a/test.py
++++ b/test.py
+@@ -80,30 +80,68 @@
+         with self.assertRaisesRegex(InvoiceError, "not JSON"):
+             extract_invoice(INVOICE_TEXT, FakeModel("I could not read this invoice."))
+ 
+-    def test_missing_supplier_is_an_error(self):
+-        with self.assertRaisesRegex(InvoiceError, "supplier is missing"):
+-            extract(supplier="")
++    def problems(self, result):
++        return {p["field"]: p for p in result["problems"]}
+ 
+-    def test_unreadable_date_is_an_error(self):
+-        with self.assertRaisesRegex(InvoiceError, "issue_date is not a date"):
+-            extract(issue_date="2nd October")
++    def test_complete_invoice_has_no_problems(self):
++        self.assertEqual(extract()["problems"], [])
+ 
+-    def test_bad_currency_is_an_error(self):
+-        with self.assertRaisesRegex(InvoiceError, "currency"):
+-            extract(currency="euros")
++    def test_missing_invoice_number_keeps_everything_else(self):
++        result = extract(invoice_number="")
++        self.assertEqual(result["status"], "incomplete")
++        self.assertIsNone(result["invoice_number"])
++        self.assertEqual(result["supplier"], "Brightwell Paper Ltd")
++        self.assertEqual(len(result["lines"]), 2)
++        self.assertEqual(result["total"], Decimal("309.00"))
++        self.assertEqual(result["problems"],
++                         [{"field": "invoice_number", "reason": "missing"}])
+ 
+-    def test_no_lines_is_an_error(self):
+-        with self.assertRaisesRegex(InvoiceError, "no invoice lines"):
+-            extract(lines=[])
++    def test_unreadable_date_is_reported_with_its_value(self):
++        result = extract(issue_date="0Z/10/2026")
++        self.assertEqual(result["status"], "incomplete")
++        self.assertIsNone(result["issue_date"])
++        self.assertEqual(result["invoice_number"], "BP-2291")
++        self.assertEqual(self.problems(result)["issue_date"],
++                         {"field": "issue_date", "reason": "not a date",
++                          "value": "0Z/10/2026"})
+ 
+-    def test_unreadable_amount_is_an_error(self):
+-        with self.assertRaisesRegex(InvoiceError, "total is not a number"):
+-            extract(total="three hundred")
++    def test_bad_currency_is_reported(self):
++        result = extract(currency="euros")
++        self.assertEqual(result["status"], "incomplete")
++        self.assertIsNone(result["currency"])
++        self.assertIn("currency", self.problems(result))
+ 
+-    def test_missing_quantity_is_an_error(self):
+-        lines = [{"description": "Delivery", "unit_price": 15}]
+-        with self.assertRaisesRegex(InvoiceError, "line 1 quantity is missing"):
+-            extract(lines=lines)
++    def test_unreadable_total_is_reported(self):
++        result = extract(total="three hundred")
++        self.assertEqual(result["status"], "incomplete")
++        self.assertIsNone(result["total"])
++        self.assertEqual(self.problems(result)["total"]["reason"], "not a number")
++
++    def test_no_lines_is_reported(self):
++        result = extract(lines=[])
++        self.assertEqual(result["status"], "incomplete")
++        self.assertEqual(result["lines"], [])
++        self.assertIsNone(result["lines_total"])
++        self.assertIn("lines", self.problems(result))
++
++    def test_unreadable_line_field_keeps_the_other_lines(self):
++        lines = [{"description": "Delivery", "unit_price": 15},
++                 {"description": "Box", "quantity": 2, "unit_price": "1.50"}]
++        result = extract(lines=lines, total=18)
++        self.assertEqual(result["status"], "incomplete")
++        self.assertEqual(list(self.problems(result)), ["line 1 quantity"])
++        self.assertIsNone(result["lines"][0]["quantity"])
++        self.assertIsNone(result["lines"][0]["amount"])
++        self.assertEqual(result["lines"][0]["unit_price"], Decimal("15"))
++        self.assertEqual(result["lines"][1]["amount"], Decimal("3.00"))
++        self.assertIsNone(result["lines_total"])
++
++    def test_incomplete_wins_over_mismatch(self):
++        self.assertEqual(extract(invoice_number="", total=1)["status"], "incomplete")
++
++    def test_nothing_usable_is_an_error(self):
++        with self.assertRaisesRegex(InvoiceError, "nothing usable"):
++            extract_invoice(INVOICE_TEXT, FakeModel("{}"))
+ 
+     def test_empty_text_is_refused_before_asking_the_model(self):
+         model = FakeModel(json.dumps(ANSWER))

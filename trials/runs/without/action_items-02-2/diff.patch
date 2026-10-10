@@ -1,0 +1,109 @@
+--- a/seam.py
++++ b/seam.py
+@@ -2,14 +2,14 @@
+ 
+ import re
+ from dataclasses import dataclass
+-from datetime import date
++from datetime import date, timedelta
+ from typing import Callable, List, Optional, Sequence
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+ 
+ PROMPT = """\
+-Below are the notes of a meeting held on {meeting_date}.
++Below are the notes of a meeting held on {meeting_date} ({meeting_weekday}).
+ The people present were: {attendees}.
+ 
+ List every action item agreed in the meeting: something a person committed
+@@ -23,6 +23,10 @@
+ - owner: the name of the person responsible, as written in the list above,
+   or "none" if nobody took it.
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
++  A day of the week is a deadline: "by Friday" is the first Friday after the
++  meeting (a week later if the meeting itself is on a Friday), and "by next
++  Wednesday" is the Wednesday of the following week. The next two weeks are:
++{calendar}
+ 
+ If there are no action items, write only: NONE
+ 
+@@ -31,6 +35,12 @@
+ """
+ 
+ _EMPTY = {"", "none", "n/a", "-", "?", "tbd", "unassigned"}
++_WEEKDAYS = [
++    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
++]
++_WEEKDAY_DUE = re.compile(
++    r"^(?:(?:by|on|before|until)\s+)?(?:(this|next)\s+)?(" + "|".join(_WEEKDAYS) + r")$"
++)
+ _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
+ 
+ 
+@@ -59,6 +69,11 @@
+ 
+     prompt = PROMPT.format(
+         meeting_date=meeting_date.isoformat(),
++        meeting_weekday=_WEEKDAYS[meeting_date.weekday()].capitalize(),
++        calendar="\n".join(
++            f"  {_WEEKDAYS[d.weekday()].capitalize()} {d.isoformat()}"
++            for d in (meeting_date + timedelta(days=n) for n in range(1, 15))
++        ),
+         attendees=", ".join(attendees),
+         notes=notes.strip(),
+     )
+@@ -108,5 +123,21 @@
+     try:
+         due = date.fromisoformat(text)
+     except ValueError:
++        due = _weekday_due(text, meeting_date)
++        if due is None:
++            return None
++    return due if due >= meeting_date else None
++
++
++def _weekday_due(text: str, meeting_date: date) -> Optional[date]:
++    """Resolve "Friday" or "next Wednesday" relative to the meeting."""
++    match = _WEEKDAY_DUE.match(_key(text))
++    if not match:
+         return None
+-    return due if due >= meeting_date else None
++    qualifier, name = match.groups()
++    weekday = _WEEKDAYS.index(name)
++    if qualifier == "next":
++        monday = meeting_date - timedelta(days=meeting_date.weekday())
++        return monday + timedelta(days=7 + weekday)
++    # First such day strictly after the meeting.
++    return meeting_date + timedelta(days=(weekday - meeting_date.weekday() - 1) % 7 + 1)
+--- a/test.py
++++ b/test.py
+@@ -112,6 +112,28 @@
+         self.assertEqual(run("Book the room | Tom Becker | 2026-03-03")[0].due, MEETING)
+ 
+ 
++class WeekdayDueTest(unittest.TestCase):
++    def due(self, text, meeting=MEETING):
++        answer = f"Do it | Ana Ruiz | {text}"
++        return extract_action_items(NOTES, ATTENDEES, meeting, FakeModel(answer))[0].due
++
++    def test_weekday_is_the_first_such_day_after_the_meeting(self):
++        self.assertEqual(self.due("Friday"), date(2026, 3, 6))
++        self.assertEqual(self.due("by Friday"), date(2026, 3, 6))
++
++    def test_next_weekday_is_in_the_following_week(self):
++        self.assertEqual(self.due("next Wednesday"), date(2026, 3, 11))
++
++    def test_same_weekday_as_the_meeting_means_a_week_later(self):
++        self.assertEqual(self.due("Friday", date(2026, 3, 6)), date(2026, 3, 13))
++
++    def test_prompt_lists_the_calendar(self):
++        model = FakeModel("NONE")
++        extract_action_items(NOTES, ATTENDEES, MEETING, model)
++        self.assertIn("Friday 2026-03-06", model.prompts[0])
++        self.assertIn("Wednesday 2026-03-11", model.prompts[0])
++
++
+ class ListTest(unittest.TestCase):
+     def test_sorted_by_deadline_with_undated_items_last_in_original_order(self):
+         items = run(

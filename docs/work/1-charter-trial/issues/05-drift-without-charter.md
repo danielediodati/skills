@@ -30,6 +30,12 @@ The judge is used on the rest once the user accepts the agreement on the ten.
 
 A trial **drifted** when at least one charter line is judged moved, toward code or toward the model: both directions count. A line moved toward the charter is not drift. If fewer than 12 of the 36 trials drifted, one in three, the problem is residual: the session stops here and ticket 06 is withdrawn. Otherwise all twelve requests go on to ticket 06, whether they drifted or not.
 
+## 2026-10-10: models
+
+- The coding agent is Sonnet 5.5 (`claude-sonnet-5-5`), in both conditions.
+- The judge is Opus 5.5 (`claude-opus-5-5`): a different model from the agent, so it does not share the agent's blind spots. Fable was ruled out by the user as judge.
+- The user's usual coding agent is Opus: the result speaks for Sonnet, and `trials/results.md` says so among its limits.
+
 ## Done when
 
 - 36 trials are run and judged.

@@ -1,0 +1,121 @@
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,6 @@
+ 
+ `recommend_products(query, catalog, model, limit=5)` takes what the shopper typed, the catalogue (a list of products, each with `id`, `name`, `price`, `rating` and `in_stock`) and a model, any callable that takes a prompt string and returns a string. The model chooses the products that suit the search, puts them in order and writes a short reason for each.
+ 
+-The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product). Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
++The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating`, `reason` (one line of at most 80 characters, shown under the product) and `filler`. Only products that exist in the catalogue and are in stock are returned, each one once. If the model picks fewer than `limit` products, the strip is topped up with the best-rated in-stock products not already in it, highest rating first (ties keep catalogue order). These have `filler: True` and an empty `reason`; the model's own picks have `filler: False` and always come first. A blank search, or a catalogue with nothing in stock, gives an empty list.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -18,6 +18,10 @@
+ 
+ def recommend_products(query, catalog, model, limit=5):
+     """Return up to `limit` in-stock products for `query`, best first.
++
++    The model's picks come first (`"filler": False`). If there are fewer than
++    `limit`, the rest are the best-rated unpicked in-stock products, highest
++    rating first, marked `"filler": True` and with an empty reason.
+ 
+     `catalog` is a list of dicts with "id", "name", "price", "rating" and "in_stock".
+     `model` is a callable taking a prompt string and returning a string.
+@@ -54,7 +58,26 @@
+             "price": product["price"],
+             "rating": product["rating"],
+             "reason": " ".join(reason.split())[:MAX_REASON_CHARS],
++            "filler": False,
+         })
+         if len(picks) == limit:
+             break
++
++    if len(picks) < limit:
++        # Top up with the best-rated in-stock products not already picked.
++        # sorted() is stable, so equal ratings keep catalogue order.
++        spare = sorted(
++            (p for p in available.values() if p["id"] not in seen),
++            key=lambda p: p["rating"],
++            reverse=True,
++        )
++        for product in spare[:limit - len(picks)]:
++            picks.append({
++                "id": product["id"],
++                "name": product["name"],
++                "price": product["price"],
++                "rating": product["rating"],
++                "reason": "",
++                "filler": True,
++            })
+     return picks
+--- a/test.py
++++ b/test.py
+@@ -27,12 +27,12 @@
+ 
+ class RecommendProductsTest(unittest.TestCase):
+     def test_picks_come_back_in_the_model_order_with_catalog_data(self):
+-        result = recommend("H-200 | Light and cheap\nH-100 | Best sound")
++        result = recommend("H-200 | Light and cheap\nH-100 | Best sound", limit=2)
+         self.assertEqual(result, [
+             {"id": "H-200", "name": "Pico wired earbuds", "price": 19.9,
+-             "rating": 4.1, "reason": "Light and cheap"},
++             "rating": 4.1, "reason": "Light and cheap", "filler": False},
+             {"id": "H-100", "name": "Aria wireless headphones", "price": 129.0,
+-             "rating": 4.7, "reason": "Best sound"},
++             "rating": 4.7, "reason": "Best sound", "filler": False},
+         ])
+ 
+     def test_query_and_in_stock_products_reach_the_model(self):
+@@ -48,21 +48,21 @@
+         self.assertNotIn("H-300", model.prompts[0])
+ 
+     def test_out_of_stock_pick_is_dropped(self):
+-        result = recommend("H-300 | Studio quality\nH-100 | Best sound")
++        result = recommend("H-300 | Studio quality\nH-100 | Best sound", limit=1)
+         self.assertEqual([p["id"] for p in result], ["H-100"])
+ 
+     def test_invented_id_is_dropped(self):
+-        result = recommend("H-999 | Great value\nH-200 | Light and cheap")
++        result = recommend("H-999 | Great value\nH-200 | Light and cheap", limit=1)
+         self.assertEqual([p["id"] for p in result], ["H-200"])
+ 
+     def test_repeated_id_counts_once(self):
+-        result = recommend("H-100 | Best sound\nH-100 | Really, the best\nH-200 | Cheap")
++        result = recommend("H-100 | Best sound\nH-100 | Really, the best\nH-200 | Cheap", limit=2)
+         self.assertEqual([p["id"] for p in result], ["H-100", "H-200"])
+         self.assertEqual(result[0]["reason"], "Best sound")
+ 
+     def test_list_markers_and_chatter_are_ignored(self):
+         answer = "Here are my picks:\n1. H-100 | Best sound\n- H-200 | Cheap\n\nEnjoy!"
+-        result = recommend(answer)
++        result = recommend(answer, limit=2)
+         self.assertEqual([p["id"] for p in result], ["H-100", "H-200"])
+ 
+     def test_no_more_than_the_limit(self):
+@@ -78,6 +78,26 @@
+     def test_pick_without_a_reason_has_an_empty_one(self):
+         result = recommend("H-100")
+         self.assertEqual(result[0]["reason"], "")
++
++    def test_strip_is_topped_up_with_best_rated_in_stock_fillers(self):
++        result = recommend("H-200 | Light and cheap")
++        self.assertEqual([p["id"] for p in result],
++                         ["H-200", "H-100", "C-020", "C-010"])
++        self.assertEqual([p["filler"] for p in result], [False, True, True, True])
++        self.assertEqual([p["reason"] for p in result[1:]], ["", "", ""])
++
++    def test_empty_or_useless_answer_gives_only_fillers(self):
++        result = recommend("Sorry, I can't help.\nH-999 | Invented\nH-300 | Out of stock")
++        self.assertEqual([p["id"] for p in result], ["H-100", "C-020", "C-010", "H-200"])
++        self.assertTrue(all(p["filler"] for p in result))
++
++    def test_fillers_stop_at_the_limit(self):
++        result = recommend("H-200 | Cheap", limit=2)
++        self.assertEqual([p["id"] for p in result], ["H-200", "H-100"])
++
++    def test_no_fillers_when_picks_fill_the_strip(self):
++        result = recommend("H-200 | Cheap\nH-100 | Sound", limit=2)
++        self.assertFalse(any(p["filler"] for p in result))
+ 
+     def test_blank_query_returns_nothing_without_asking_the_model(self):
+         model = FakeModel("H-100 | Best sound")

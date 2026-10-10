@@ -1,0 +1,100 @@
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@
+ 
+ - `queue`: one of `billing`, `technical`, `account`, `shipping`, `general`
+ - `urgency`: one of `low`, `normal`, `high`, `urgent`; enterprise customers are raised one level
+-- `summary`: a single line of at most 120 characters, shown in the agents' ticket list
++- `summary`: a single line of at most 120 characters, shown in the agents' ticket list. A longer summary is cut at a word boundary (or, when whole leading sentences fit, after the last of them) and ends with `…` so agents know there is more
+ - `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
+ 
+ Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
+--- a/seam.py
++++ b/seam.py
+@@ -7,6 +7,7 @@
+ RESPOND_WITHIN_HOURS = {"low": 72, "normal": 24, "high": 8, "urgent": 1}
+ MAX_BODY_CHARS = 2000
+ MAX_SUMMARY_CHARS = 120
++ELLIPSIS = "…"
+ 
+ PROMPT = """You triage customer support tickets.
+ 
+@@ -20,6 +21,7 @@
+ {body}
+ """
+ 
++SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+ FIELD = re.compile(r"^\W*(queue|urgency|summary)\W*:\s*(.+)$", re.IGNORECASE)
+ 
+ 
+@@ -53,9 +55,38 @@
+     return {
+         "queue": queue,
+         "urgency": urgency,
+-        "summary": summary[:MAX_SUMMARY_CHARS],
++        "summary": _shorten(summary, MAX_SUMMARY_CHARS),
+         "respond_within_hours": RESPOND_WITHIN_HOURS[urgency],
+     }
++
++
++def _shorten(text, limit):
++    """Fit `text` in `limit` characters, never cutting a word.
++
++    Shortened text ends with an ellipsis. Whole leading sentences are
++    preferred over a fragment of the next one.
++    """
++    if len(text) <= limit:
++        return text
++
++    sentences = SENTENCE_END.split(text)
++    kept = ""
++    for sentence in sentences[:-1]:
++        candidate = f"{kept} {sentence}" if kept else sentence
++        if len(candidate) + len(" " + ELLIPSIS) > limit:
++            break
++        kept = candidate
++    if kept:
++        return f"{kept} {ELLIPSIS}"
++
++    room = limit - len(ELLIPSIS)
++    if text[room].isspace():
++        head = text[:room]
++    elif " " in text[:room]:
++        head = text[:room].rsplit(" ", 1)[0]
++    else:
++        head = text[:room]  # a single word longer than the space: unavoidable
++    return head.rstrip(" ,;:-") + ELLIPSIS
+ 
+ 
+ def _parse_fields(answer):
+--- a/test.py
++++ b/test.py
+@@ -81,6 +81,28 @@
+         result = triage("queue: billing\nurgency: low\nsummary:  a   b " + "c" * 200)
+         self.assertTrue(result["summary"].startswith("a b ccc"))
+         self.assertEqual(len(result["summary"]), 120)
++        self.assertTrue(result["summary"].endswith("…"))
++
++    def test_short_summary_is_untouched(self):
++        result = triage("queue: billing\nurgency: low\nsummary: " + "a" * 120)
++        self.assertEqual(result["summary"], "a" * 120)
++
++    def test_long_summary_is_cut_at_a_word_and_marked(self):
++        text = ("The customer would like to keep the subscription for the three "
++                "seats used by the design team but wants to cancel the remaining ones")
++        result = triage("queue: billing\nurgency: low\nsummary: " + text)
++        summary = result["summary"]
++        self.assertLessEqual(len(summary), 120)
++        self.assertTrue(summary.endswith("…"))
++        self.assertIn(summary[:-1], text)
++        self.assertTrue(text[len(summary) - 1:].startswith(" "))
++
++    def test_whole_sentences_are_preferred_to_a_fragment(self):
++        first = "Keeps the three design seats."
++        second = "Wants the other two cancelled before the next invoice."
++        third = "Please confirm the new total in writing, with the date it applies from."
++        result = triage(f"queue: billing\nurgency: low\nsummary: {first} {second} {third}")
++        self.assertEqual(result["summary"], f"{first} {second} …")
+ 
+     def test_only_the_start_of_a_long_body_is_sent(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")

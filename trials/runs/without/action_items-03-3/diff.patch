@@ -1,0 +1,127 @@
+--- a/README.md
++++ b/README.md
+@@ -9,7 +9,7 @@
+ The model reads the notes and writes the items. The code decides what is kept:
+ 
+ - lines of the answer that are not `task | owner | due` are skipped;
+-- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
++- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`. A task shared by several people stays one item: `owner` is the first of them, `co_owners` the rest, and `owners` all of them. Names that were not in the meeting are left out, so the attendees who are named are kept;
+ - a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -3,7 +3,7 @@
+ import re
+ from dataclasses import dataclass
+ from datetime import date
+-from typing import Callable, List, Optional, Sequence
++from typing import Callable, List, Optional, Sequence, Tuple
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+@@ -21,7 +21,8 @@
+ 
+ - task: a short imperative sentence, e.g. "Send the revised quote to Halden".
+ - owner: the name of the person responsible, as written in the list above,
+-  or "none" if nobody took it.
++  or "none" if nobody took it. If several people share the task, write all
++  their names separated by ";", e.g. "Ana Ruiz; Tom Becker".
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
+ 
+ If there are no action items, write only: NONE
+@@ -32,6 +33,7 @@
+ 
+ _EMPTY = {"", "none", "n/a", "-", "?", "tbd", "unassigned"}
+ _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
++_OWNER_SEP = re.compile(r"\s*[;,&/]\s*|\s+and\s+", re.IGNORECASE)
+ 
+ 
+ @dataclass(frozen=True)
+@@ -39,6 +41,12 @@
+     task: str
+     owner: Optional[str]  # one of the attendees, spelled as the caller gave it
+     due: Optional[date]
++    co_owners: Tuple[str, ...] = ()  # the other attendees sharing the task
++
++    @property
++    def owners(self) -> Tuple[str, ...]:
++        """Everyone who took the task, in the order the model gave them."""
++        return ((self.owner,) if self.owner is not None else ()) + self.co_owners
+ 
+ 
+ def extract_action_items(
+@@ -50,9 +58,9 @@
+     """Return the action items found in `notes`, soonest deadline first.
+ 
+     `model` takes a prompt and returns text. Its answer is not trusted: lines
+-    that are not in the requested form are skipped, an owner who was not in
+-    the meeting becomes None, and so does a deadline that is not a real date
+-    or falls before the meeting.
++    that are not in the requested form are skipped, owners who were not in
++    the meeting are left out (an item with none left is unowned), and a
++    deadline that is not a real date or falls before the meeting becomes None.
+     """
+     if not notes.strip():
+         return []
+@@ -76,12 +84,13 @@
+         task = _clean_task(fields[0])
+         if not task or _key(task) == "task":  # empty, or the header echoed back
+             continue
+-        owner = by_name.get(_key(fields[1]))
++        owners = _parse_owners(fields[1], by_name)
+         due = _parse_due(fields[2], meeting_date)
+-        if (_key(task), owner) in seen:
++        if (_key(task), owners) in seen:
+             continue
+-        seen.add((_key(task), owner))
+-        items.append(ActionItem(task, owner, due))
++        seen.add((_key(task), owners))
++        first = owners[0] if owners else None
++        items.append(ActionItem(task, first, due, owners[1:]))
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+@@ -90,6 +99,18 @@
+ 
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
++
++
++def _parse_owners(text: str, by_name: dict) -> Tuple[str, ...]:
++    """Attendees named in `text`; people who were not in the meeting are left out."""
++    if _key(text) in by_name:  # the whole field is one name, e.g. "Ruiz, Ana"
++        return (by_name[_key(text)],)
++    owners: List[str] = []
++    for part in _OWNER_SEP.split(text):
++        name = by_name.get(_key(part))
++        if name is not None and name not in owners:
++            owners.append(name)
++    return tuple(owners)
+ 
+ 
+ def _clean_task(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -93,6 +93,21 @@
+         items = run("Approve the budget | Marta Olsen | none")
+         self.assertEqual(items, [ActionItem("Approve the budget", None, None)])
+ 
++    def test_shared_task_stays_one_item_with_every_owner(self):
++        for field in ("Ana Ruiz; Tom Becker", "ana ruiz and Tom Becker", "Ana Ruiz, Tom Becker"):
++            items = run(f"Draft the supplier shortlist | {field} | 2026-03-12")
++            self.assertEqual(len(items), 1)
++            self.assertEqual(items[0].owners, ("Ana Ruiz", "Tom Becker"))
++            self.assertEqual(items[0].owner, "Ana Ruiz")
++
++    def test_shared_task_keeps_the_known_owner_when_the_other_was_not_there(self):
++        items = run("Check the contract | Ana Ruiz; Marta from legal | none")
++        self.assertEqual(items, [ActionItem("Check the contract", "Ana Ruiz", None)])
++
++    def test_repeated_name_is_listed_once(self):
++        items = run("Check the contract | Ana Ruiz; ana ruiz | none")
++        self.assertEqual(items[0].owners, ("Ana Ruiz",))
++
+     def test_explicit_none_owner(self):
+         self.assertIsNone(run("Find a caterer | none | none")[0].owner)
+ 
