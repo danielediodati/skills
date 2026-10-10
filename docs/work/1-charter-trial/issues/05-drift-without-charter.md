@@ -20,11 +20,15 @@ Each of the twelve requests is given to a coding agent three times, on a fresh c
 
 Before the judge's verdicts count:
 
-1. The user labels ten trials by hand with the rubric, without seeing the judge's answers.
-2. The judge labels the same ten.
-3. Where they disagree, the rubric is corrected (ticket 04's file), and the ten are judged again.
+1. The judge labels all 36 trials. The gate is read on these verdicts, provisionally.
+2. After ticket 06, the user checks seven verdicts drawn from the 72 trials of both conditions, mixed and with the condition hidden, so the user cannot tell which group a trial belongs to. They are chosen where a wrong verdict would cost most: borderline moves, and lines judged held on code the change touched. Each is shown in two lines, what the agent did and the verdict, and the user answers agree or not.
+3. Where they disagree, the rubric (`trials/judge/rubric.md`) is corrected, the affected trials are judged again, and the gate and the comparison are read again.
 
-The judge is used on the rest once the user accepts the agreement on the ten.
+The user sees the judge's verdict before answering, so their label is blind to the condition but not to the judge: the held verdicts mixed into the seven are there to catch errors in both directions. Labelling ten trials blind by hand was the first plan, dropped by the user as too long.
+
+## 2026-10-10: provisional gate
+
+27 of 36 trials drifted, on the uncalibrated judge: far above 12, so calibration is unlikely to flip it. The session goes on to ticket 06. See `trials/results-without.md`.
 
 ## The gate
 

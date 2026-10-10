@@ -14,14 +14,18 @@ import concurrent.futures
 import difflib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 from pathlib import Path
 
 TRIALS = Path(__file__).resolve().parent
 SEAMS = TRIALS / "seams"
+CHARTERS = TRIALS / "charters"
+SETUP_SKILL = TRIALS.parent / "a4a" / "skills" / "setup" / "SKILL.md"
 RUNS = TRIALS / "runs"
 WORK_ROOT = Path(os.environ.get("CHARTER_TRIAL_WORK") or Path(tempfile.gettempdir()) / "charter-trial")
 
@@ -61,8 +65,30 @@ def prepare(condition, trial_id, seam_dir):
     for name in SEAM_FILES:
         shutil.copy2(seam_dir / name, work / name)
     if condition == "with":
-        raise NotImplementedError("the charter and the AGENTS.md rule come with ticket 06")
+        charter = work / "evals" / seam_dir.name / "charter.md"
+        charter.parent.mkdir(parents=True)
+        shutil.copy2(CHARTERS / f"{seam_dir.name}.md", charter)
+        (work / "AGENTS.md").write_text(agents_rule(), encoding="utf-8")
     return work
+
+
+def agents_rule():
+    """The `## Stochastic seams` section, read from the setup skill that ships it."""
+    skill = SETUP_SKILL.read_text(encoding="utf-8")
+    block = re.search(r"```md\n(.*?)\n\s*```", skill, re.DOTALL).group(1)
+    return "# AGENTS\n\n" + textwrap.dedent(block) + "\n"
+
+
+def system_prompt_args(condition, work):
+    """--safe-mode skips AGENTS.md, so the rule reaches the agent the way Claude Code
+    would load it: in the system prompt, under the same heading."""
+    if condition != "with":
+        return []
+    rule = (work / "AGENTS.md").read_text(encoding="utf-8")
+    return [
+        "--append-system-prompt",
+        f"Contents of {work / 'AGENTS.md'} (project instructions, checked into the codebase):\n\n{rule}",
+    ]
 
 
 def snapshot(directory):
@@ -98,7 +124,7 @@ def run(condition, trial_id, seam_dir, request, out):
     work = prepare(condition, trial_id, seam_dir)
     before = snapshot(work)
     completed = subprocess.run(
-        [shutil.which("claude"), *CLAUDE_ARGS],
+        [shutil.which("claude"), *CLAUDE_ARGS, *system_prompt_args(condition, work)],
         input=request.read_text(encoding="utf-8"),
         cwd=work,
         env=session_env(),

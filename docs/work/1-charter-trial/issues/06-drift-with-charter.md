@@ -17,7 +17,9 @@ All twelve requests, whether they drifted in ticket 05 or not. Each is given to 
 
 ## Judging
 
-The same judge and rubric as ticket 05, blind to the condition.
+The same judge and rubric as ticket 05, blind to the condition. Then the calibration described in ticket 05, on seven trials drawn from both conditions; ticket 05 closes with it.
+
+- `--safe-mode` keeps the user's own `CLAUDE.md`, skills and plugins out of both conditions, but it also skips the trial's `AGENTS.md`. With the charter, the `AGENTS.md` written in the trial directory is also passed with `--append-system-prompt`, under the heading Claude Code gives project instructions (checked on 2026-10-10: the agent quotes it back).
 
 ## What the result has to say
 
