@@ -1,0 +1,13 @@
+{
+  "trial": "recommend_products-01-2",
+  "condition": "with",
+  "model": "claude-sonnet-5-5",
+  "request": "seams/recommend_products/requests/01.md",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 18,
+  "duration_ms": 88135,
+  "total_cost_usd": 0.2573118,
+  "session_id": "206059a9-4245-4a5f-819c-0cd3f9e9a9d5"
+}

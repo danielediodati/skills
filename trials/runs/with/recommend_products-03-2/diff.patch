@@ -1,0 +1,111 @@
+--- a/evals/recommend_products/charter.md
++++ b/evals/recommend_products/charter.md
+@@ -9,7 +9,7 @@
+ - Which products suit the search: linking a need to what products do is reading, not matching words.
+ - Their order: best for this search, not best by rating or price, which a function could sort.
+ - How many, from none to `limit`: three that fit beat five that fill.
+-- What each reason says: a good one says how the product meets the need; claims in it are not checked.
++- What each reason says: a good one says how the product meets the need; claims in it are not checked, except price (see Constrained).
+ - The language of the reason: it is addressed to the shopper.
+ 
+ ## Constrained
+@@ -18,6 +18,7 @@
+ - Name, price and rating come from the catalogue, never from the model: they are facts the shop already holds.
+ - No valid pick gives an empty strip, with no fallback list: products unrelated to the search are worth less than no strip.
+ - The reason is one line, cut to 80 characters; an empty reason is kept: the space under the product is fixed, and the right product without a reason beats no product.
++- A reason never states a price other than the product's own: code blanks such a reason and keeps the product. A wrong price shown to a shopper is a legal exposure (a customer ordered at the quoted price and complained). A price is a figure next to a currency or written with two decimals; other numbers ("2 m", "30-hour") are free.
+ - One model call, no retry: the strip sits at the top of the results page.
+ - The mechanical steps: a blank search or nothing in stock returns an empty list without calling the model, `limit` below 1 is an error, list markers and chatter in the answer are skipped.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -14,6 +14,39 @@
+ """
+ 
+ LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
++
++_AMOUNT = r"\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?"
++_CURRENCY = r"(?:[€$£]|eur(?:o|os)?\b|usd\b|gbp\b|dollars?\b|pounds?\b)"
++# A figure is a price when a currency sits next to it, or when it is written
++# with two decimals ("19.90"). Other numbers ("2 m", "30-hour") are left alone.
++PRICE = re.compile(
++    rf"{_CURRENCY}\s*(?P<a>{_AMOUNT})(?![\d])"
++    rf"|(?<![\d.,])(?P<b>{_AMOUNT})\s*{_CURRENCY}"
++    rf"|(?<![\d.,])(?P<c>\d+[.,]\d{{2}})(?![\d])",
++    re.IGNORECASE,
++)
++
++
++def _to_float(text):
++    separators = [i for i, ch in enumerate(text) if ch in ".,"]
++    if not separators:
++        return float(text)
++    last = separators[-1]
++    tail = text[last + 1:]
++    # A lone separator followed by three digits groups thousands ("1,299").
++    if len(tail) == 3 and len(separators) == 1:
++        return float(text.replace(",", "").replace(".", ""))
++    whole = text[:last].replace(",", "").replace(".", "")
++    return float(f"{whole}.{tail}")
++
++
++def states_other_price(reason, price):
++    """True when `reason` quotes a price that differs from `price`."""
++    for match in PRICE.finditer(reason):
++        amount = match.group("a") or match.group("b") or match.group("c")
++        if abs(_to_float(amount) - price) >= 0.005:
++            return True
++    return False
+ 
+ 
+ def recommend_products(query, catalog, model, limit=5):
+@@ -48,12 +81,16 @@
+             continue
+         seen.add(product_id)
+         product = available[product_id]
++        reason = " ".join(reason.split())[:MAX_REASON_CHARS]
++        # A wrong price is a promise we cannot keep: keep the product, lose the reason.
++        if states_other_price(reason, product["price"]):
++            reason = ""
+         picks.append({
+             "id": product_id,
+             "name": product["name"],
+             "price": product["price"],
+             "rating": product["rating"],
+-            "reason": " ".join(reason.split())[:MAX_REASON_CHARS],
++            "reason": reason,
+         })
+         if len(picks) == limit:
+             break
+--- a/test.py
++++ b/test.py
+@@ -79,6 +79,29 @@
+         result = recommend("H-100")
+         self.assertEqual(result[0]["reason"], "")
+ 
++    def test_reason_with_another_price_is_emptied_and_product_kept(self):
++        answer = "H-200 | A bargain at only €14.90\nC-020 | Half the price of the 2 m version, just $4"
++        result = recommend(answer, query="cable")
++        self.assertEqual([p["id"] for p in result], ["H-200", "C-020"])
++        self.assertEqual([p["reason"] for p in result], ["", ""])
++
++    def test_reason_with_the_right_price_is_kept(self):
++        for reason in ("Solid choice at 19.90", "Only €19.90", "19,90 EUR well spent", "Just 19.9 euros"):
++            result = recommend(f"H-200 | {reason}")
++            self.assertEqual(result[0]["reason"], reason)
++
++    def test_other_numbers_in_a_reason_are_not_prices(self):
++        for reason in ("2 m long", "30-hour battery", "Rated 4.5 by 120 buyers"):
++            result = recommend(f"H-100 | {reason}")
++            self.assertEqual(result[0]["reason"], reason)
++
++    def test_price_with_thousands_separator(self):
++        catalog = [{"id": "X", "name": "TV", "price": 1299.0, "rating": 4.0, "in_stock": True}]
++        ok = recommend_products("tv", catalog, FakeModel("X | Only €1,299.00"))
++        bad = recommend_products("tv", catalog, FakeModel("X | Only €999"))
++        self.assertEqual(ok[0]["reason"], "Only €1,299.00")
++        self.assertEqual(bad[0]["reason"], "")
++
+     def test_blank_query_returns_nothing_without_asking_the_model(self):
+         model = FakeModel("H-100 | Best sound")
+         self.assertEqual(recommend_products("   ", CATALOG, model), [])

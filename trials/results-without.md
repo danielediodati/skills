@@ -1,6 +1,6 @@
 # Results without the charter
 
-Provisional: judged by Opus 5.5 with `trials/judge/rubric.md` before calibration. The calibration runs on seven trials drawn blind from both conditions, after ticket 06, and may correct these verdicts.
+Judged by Opus 5.5 with `trials/judge/rubric.md`. The judge was calibrated after ticket 06 on seven trials drawn from both conditions; the user agreed with all seven, and these verdicts stand. The comparison with the charter is in `trials/results.md`.
 
 36 trials: twelve requests, three times each, Sonnet 5.5 as coding agent, no charter and no rule.
 

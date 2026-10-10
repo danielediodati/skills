@@ -1,0 +1,89 @@
+--- a/README.md
++++ b/README.md
+@@ -11,6 +11,8 @@
+ - `summary`: a single line of at most 120 characters, shown in the agents' ticket list
+ - `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
+ 
++Quoted earlier messages in an email reply (`>` lines and the `On ... wrote:` line) are removed from the body before the model sees it, so only what the customer wrote this time is triaged.
++
+ Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/evals/triage_ticket/charter.md
++++ b/evals/triage_ticket/charter.md
+@@ -16,6 +16,7 @@
+ - Hours to respond come from the urgency: 72, 24, 8, 1; `null` when the urgency is `null`: it is the desk's promised response time.
+ - The summary is one line of at most 120 characters, and the subject when the model gives none: the space in the ticket list is fixed, and the subject is the customer's own words, not a decision.
+ - One model call sees the ticket, its body cut to a fixed cap (today 2000 characters); no chunking, no retry: merging several answers would decide in the model's place. The cap is a budget number and may be raised without moving the line.
++- Quoted earlier messages (lines starting with `>` and the `On <date>, <name> wrote:` line before them) are removed from the body before the cap: they are not what the customer wrote this time, and they would otherwise push the new text past the cap or be triaged in its place. Where the quote sits does not matter.
+ - The mechanical steps: a ticket with neither subject nor body raises `ValueError` before the model is called; the answer is read whatever its case, bold or list markers, the first occurrence of a field winning.
+ 
+ ## Target and budget
+--- a/seam.py
++++ b/seam.py
+@@ -20,6 +20,7 @@
+ {body}
+ """
+ 
++ATTRIBUTION = re.compile(r"^[ \t]*On [^\n]*(?:\n[^\n]*)?\bwrote:[ \t]*$", re.MULTILINE)
+ FIELD = re.compile(r"^\W*(queue|urgency|summary)\W*:\s*(.+)$", re.IGNORECASE)
+ 
+ 
+@@ -38,7 +39,7 @@
+         queues=", ".join(QUEUES),
+         urgencies=", ".join(URGENCIES),
+         subject=subject,
+-        body=body[:MAX_BODY_CHARS],
++        body=_without_quoted_replies(body)[:MAX_BODY_CHARS],
+     ))
+     fields = _parse_fields(answer)
+ 
+@@ -58,6 +59,16 @@
+     }
+ 
+ 
++def _without_quoted_replies(body):
++    """Drop what a mail program quotes from earlier messages: `>` lines and
++    the "On <date>, <name> wrote:" line that introduces them (which some
++    programs wrap over two lines). Done before the cap so that quoted text
++    cannot push the customer's new words out of what the model sees."""
++    body = ATTRIBUTION.sub("", body)
++    lines = [line for line in body.splitlines() if not line.lstrip().startswith(">")]
++    return "\n".join(lines).strip()
++
++
+ def _parse_fields(answer):
+     fields = {}
+     for line in answer.splitlines():
+--- a/test.py
++++ b/test.py
+@@ -87,6 +87,29 @@
+         triage_ticket({"subject": "Hi", "body": "x" * 2000 + "TAIL"}, model)
+         self.assertNotIn("TAIL", model.prompts[0])
+ 
++    def test_quoted_reply_above_new_text_is_not_sent(self):
++        quoted = "\n".join("> I was charged twice, line %d" % i for i in range(60))
++        body = (
++            "On 14 Sep 2026, Support wrote:\n" + quoted
++            + "\n\nNew problem: the app crashes every time I log in."
++        )
++        model = FakeModel("queue: technical\nurgency: high\nsummary: x")
++        triage_ticket({"subject": "Re: Charged twice", "body": body}, model)
++        self.assertIn("crashes every time", model.prompts[0])
++        self.assertNotIn("charged twice, line", model.prompts[0])
++        self.assertNotIn("Support wrote", model.prompts[0])
++
++    def test_quoted_reply_below_new_text_is_not_sent(self):
++        body = (
++            "The app crashes at login.\n\nOn 14 Sep 2026 at 10:00, Support\n"
++            "<support@example.com> wrote:\n> Your refund is done.\n> Regards"
++        )
++        model = FakeModel("queue: technical\nurgency: high\nsummary: x")
++        triage_ticket({"subject": "Re: Refund", "body": body}, model)
++        self.assertIn("crashes at login", model.prompts[0])
++        self.assertNotIn("refund is done", model.prompts[0])
++        self.assertNotIn("wrote", model.prompts[0])
++
+     def test_empty_ticket_is_refused_before_asking_the_model(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")
+         with self.assertRaises(ValueError):

@@ -5,8 +5,8 @@
 Each trial runs in its own directory under WORK_ROOT (CHARTER_TRIAL_WORK, by default
 charter-trial in the system temporary directory), outside the repo, holding only the
 seam's files. Its diff, the agent's final answer and the session's numbers land in
-trials/runs/<condition>/<seam>-<request>-<repeat>/. A trial whose folder already holds
-session.json is skipped, so an interrupted run resumes.
+trials/runs/<condition>/<seam>-<request>-<repeat>/. A trial whose folder already holds a
+session.json without an error is skipped, so an interrupted or failed run resumes.
 """
 
 import argparse
@@ -157,6 +157,12 @@ def run(condition, trial_id, seam_dir, request, out):
     return trial_id, session
 
 
+def done(out):
+    """A trial is done once it has a session that did not fail; a failed one runs again."""
+    session = out / "session.json"
+    return session.exists() and not json.loads(session.read_text(encoding="utf-8")).get("is_error")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("condition", choices=("without", "with"))
@@ -166,7 +172,7 @@ def main():
 
     todo = [
         t for t in trials(args.condition)
-        if (not args.only or t[0] in args.only) and not (t[3] / "session.json").exists()
+        if (not args.only or t[0] in args.only) and not done(t[3])
     ]
     print(f"{len(todo)} trials to run", flush=True)
     with concurrent.futures.ThreadPoolExecutor(args.parallel) as pool:

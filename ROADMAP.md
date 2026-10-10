@@ -10,5 +10,4 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.md` changes what a coding agent does when it works on a stochastic seam. This session tests it on atomic seams before any further skill is written. If ticket 5 finds drift in fewer than 12 of its 36 trials without a charter, the problem is residual and the session stops there.
 
-5. **Is there drift?** Every request given to a coding agent without the charter, and the judge calibrated on the user's labels - [ticket](docs/work/1-charter-trial/issues/05-drift-without-charter.md)
-6. **Does the charter reduce it?** Every request, given again with the charter and the rule - [ticket](docs/work/1-charter-trial/issues/06-drift-with-charter.md)
+7. **Close the back door in the rule.** A rule that forbids the agent to edit the charter, and the trials with the charter run again - [ticket](docs/work/1-charter-trial/issues/07-rule-v2.md)

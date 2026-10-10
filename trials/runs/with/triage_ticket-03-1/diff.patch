@@ -1,0 +1,114 @@
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@
+ 
+ - `queue`: one of `billing`, `technical`, `account`, `shipping`, `general`
+ - `urgency`: one of `low`, `normal`, `high`, `urgent`; enterprise customers are raised one level
+-- `summary`: a single line of at most 120 characters, shown in the agents' ticket list
++- `summary`: a single line of at most 120 characters, shown in the agents' ticket list; a longer one is shortened at a sentence or word boundary and ends with `…`
+ - `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
+ 
+ Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
+--- a/evals/triage_ticket/charter.md
++++ b/evals/triage_ticket/charter.md
+@@ -15,6 +15,7 @@
+ - The customer's tier never reaches the model; code raises `enterprise` one level, up to `urgent`: it is a contract rule, and a model that saw the tier could raise it twice.
+ - Hours to respond come from the urgency: 72, 24, 8, 1; `null` when the urgency is `null`: it is the desk's promised response time.
+ - The summary is one line of at most 120 characters, and the subject when the model gives none: the space in the ticket list is fixed, and the subject is the customer's own words, not a decision.
++- A summary that has to be shortened is cut by code, never by asking the model to be briefer: whole leading sentences if any fit, else whole words, never mid-word, and it ends with `…` so an agent knows there is more; the limit counts the marker.
+ - One model call sees the ticket, its body cut to a fixed cap (today 2000 characters); no chunking, no retry: merging several answers would decide in the model's place. The cap is a budget number and may be raised without moving the line.
+ - The mechanical steps: a ticket with neither subject nor body raises `ValueError` before the model is called; the answer is read whatever its case, bold or list markers, the first occurrence of a field winning.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -20,6 +20,8 @@
+ {body}
+ """
+ 
++ELLIPSIS = "…"
++SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+ FIELD = re.compile(r"^\W*(queue|urgency|summary)\W*:\s*(.+)$", re.IGNORECASE)
+ 
+ 
+@@ -53,7 +55,7 @@
+     return {
+         "queue": queue,
+         "urgency": urgency,
+-        "summary": summary[:MAX_SUMMARY_CHARS],
++        "summary": _shorten(summary, MAX_SUMMARY_CHARS),
+         "respond_within_hours": RESPOND_WITHIN_HOURS[urgency],
+     }
+ 
+@@ -68,6 +70,33 @@
+     return fields
+ 
+ 
++def _shorten(text, limit):
++    """Fit `text` in `limit` characters without ending mid-word.
++
++    A shortened text keeps whole leading sentences when any fit, else whole
++    words, and always ends with the ELLIPSIS marker.
++    """
++    if len(text) <= limit:
++        return text
++    room = limit - len(ELLIPSIS)
++
++    kept = ""
++    for sentence in SENTENCE_END.split(text):
++        candidate = f"{kept} {sentence}" if kept else sentence
++        if len(candidate) > room:
++            break
++        kept = candidate
++    if kept:
++        return kept + ELLIPSIS
++
++    head = text[:room + 1]
++    if " " in head:
++        head = head.rsplit(" ", 1)[0]
++    else:
++        head = text[:room]
++    return head.rstrip(" ,;:-") + ELLIPSIS
++
++
+ def _choice(value, allowed, default):
+     value = (value or "").strip(" .*`\"'").lower()
+     return value if value in allowed else default
+--- a/test.py
++++ b/test.py
+@@ -78,9 +78,33 @@
+         self.assertEqual(result["respond_within_hours"], 1)
+ 
+     def test_summary_is_one_line_and_capped(self):
+-        result = triage("queue: billing\nurgency: low\nsummary:  a   b " + "c" * 200)
+-        self.assertTrue(result["summary"].startswith("a b ccc"))
+-        self.assertEqual(len(result["summary"]), 120)
++        result = triage("queue: billing\nurgency: low\nsummary:  a   b " + "cc " * 100)
++        self.assertTrue(result["summary"].startswith("a b cc cc"))
++        self.assertLessEqual(len(result["summary"]), 120)
++        self.assertTrue(result["summary"].endswith("…"))
++
++    def test_short_summary_is_untouched(self):
++        result = triage("queue: billing\nurgency: low\nsummary: " + "a" * 120)
++        self.assertEqual(result["summary"], "a" * 120)
++
++    def test_long_summary_is_cut_at_a_word_and_marked(self):
++        text = "The customer would like to keep the subscription for the three seats used by the design team but wants to cancel the remaining ones"
++        result = triage("queue: billing\nurgency: low\nsummary: " + text)
++        summary = result["summary"]
++        self.assertLessEqual(len(summary), 120)
++        self.assertTrue(summary.endswith("…"))
++        self.assertTrue(text.startswith(summary[:-1]))
++        self.assertEqual(text[len(summary) - 1], " ")
++
++    def test_long_summary_keeps_whole_leading_sentences(self):
++        first = "Customer confirms the replacement router works."
++        second = "Asks us not to close the ticket until the old one has been collected by the courier."
++        result = triage(f"queue: shipping\nurgency: low\nsummary: {first} {second}")
++        self.assertEqual(result["summary"], first + "…")
++
++    def test_unbroken_text_is_cut_to_the_limit_and_marked(self):
++        result = triage("queue: billing\nurgency: low\nsummary: " + "c" * 200)
++        self.assertEqual(result["summary"], "c" * 119 + "…")
+ 
+     def test_only_the_start_of_a_long_body_is_sent(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")

@@ -1,0 +1,75 @@
+--- a/evals/action_items/charter.md
++++ b/evals/action_items/charter.md
+@@ -10,6 +10,7 @@
+ - What deadline the notes mean: turning "by Friday" into a date is reading in context.
+ 
+ ## Constrained
++- An owner the model gives as a first name or other part of a name is the attendee whose name contains it, if exactly one does; with two candidates it stays unassigned, never guessed: a string comparison.
+ - An item the model gives without an owner or a due date stays in the list: dropping it would hide exactly the items still to assign.
+ - The due date is a real date, on or after the meeting: checkable before anything runs.
+ - A due date code rejected must not look like one never given. Not yet in code, which sets both to `None`.
+--- a/seam.py
++++ b/seam.py
+@@ -64,7 +64,6 @@
+     )
+     answer = model(prompt)
+ 
+-    by_name = {_key(name): name for name in attendees}
+     items: List[ActionItem] = []
+     seen = set()
+     for line in answer.splitlines():
+@@ -76,7 +75,7 @@
+         task = _clean_task(fields[0])
+         if not task or _key(task) == "task":  # empty, or the header echoed back
+             continue
+-        owner = by_name.get(_key(fields[1]))
++        owner = _match_owner(fields[1], attendees)
+         due = _parse_due(fields[2], meeting_date)
+         if (_key(task), owner) in seen:
+             continue
+@@ -90,6 +89,23 @@
+ 
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
++
++
++def _match_owner(text: str, attendees: Sequence[str]) -> Optional[str]:
++    """The attendee `text` names, or None if it names nobody or more than one.
++
++    A full name matches as written; otherwise the words of `text` (say, a first
++    name) must all be words of exactly one attendee's name.
++    """
++    key = _key(text)
++    if key in _EMPTY:
++        return None
++    for name in attendees:
++        if _key(name) == key:
++            return name
++    words = set(key.split())
++    found = [name for name in attendees if words <= set(_key(name).split())]
++    return found[0] if len(found) == 1 else None
+ 
+ 
+ def _clean_task(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -93,6 +93,19 @@
+         items = run("Approve the budget | Marta Olsen | none")
+         self.assertEqual(items, [ActionItem("Approve the budget", None, None)])
+ 
++    def test_first_name_of_a_single_attendee_is_that_attendee(self):
++        items = run("Order the badges | Priya | 2026-03-10\nBook the room | tom | none")
++        self.assertEqual([item.owner for item in items], ["Priya Raman", "Tom Becker"])
++
++    def test_first_name_shared_by_two_attendees_stays_unassigned(self):
++        items = extract_action_items(
++            "Tom will book the room.",
++            ["Ana Ruiz", "Tom Becker", "Tom Fischer"],
++            MEETING,
++            FakeModel("Book the room | Tom | none\nPlan the menu | Tom Fischer | none"),
++        )
++        self.assertEqual([item.owner for item in items], [None, "Tom Fischer"])
++
+     def test_explicit_none_owner(self):
+         self.assertIsNone(run("Find a caterer | none | none")[0].owner)
+ 

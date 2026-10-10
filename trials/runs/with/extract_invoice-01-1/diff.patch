@@ -1,0 +1,161 @@
+--- a/README.md
++++ b/README.md
+@@ -6,6 +6,8 @@
+ 
+ The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
+ 
++Amounts may be written as suppliers write them: `1.234,56`, `1,234.56`, `£1,234.56`, `1'050.00 CHF`. An amount whose separator can be read two ways (`1,234`) is refused rather than guessed.
++
+ If the model's answer can't be read, or a field is missing or malformed, the function raises `InvoiceError` with a message naming the field.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/evals/extract_invoice/charter.md
++++ b/evals/extract_invoice/charter.md
+@@ -20,7 +20,7 @@
+ - Line amounts computed by code (quantity × unit price, rounded half-up to cents), never read from the model: arithmetic has an answer written before anything runs.
+ - The lines must add up to the total to the cent, no tolerance; otherwise `mismatch` and a clerk. A wrong record in the ledger costs more than one checked by hand.
+ - One model call, no retry, no fallback: the cost per invoice is fixed, and an error already sends the invoice to a person.
+-- The mechanical steps: empty text refused before the model is called, JSON read from inside a code fence or a sentence, currency upper-cased.
++- The mechanical steps: empty text refused before the model is called, JSON read from inside a code fence or a sentence, currency upper-cased, amounts written with thousands separators, a decimal comma or point and a currency symbol or code read by code; an amount that can be read two ways (`1.234`, `1,234`) is refused, not guessed.
+ 
+ ## Target and budget
+ - Budget: one model call per invoice.
+--- a/seam.py
++++ b/seam.py
+@@ -94,8 +94,18 @@
+ def _number(value, label):
+     if value is None or isinstance(value, bool):
+         raise InvoiceError(f"{label} is missing")
++    if isinstance(value, str):
++        text = _plain_amount(value)
++        if text is None:
++            raise InvoiceError(f"{label} is not a number: {value!r}")
++        if text == "":
++            raise InvoiceError(
++                f"{label} is not a number: {value!r} (separators can be read two ways)"
++            )
++    else:
++        text = str(value).strip()
+     try:
+-        number = Decimal(str(value).strip())
++        number = Decimal(text)
+     except InvalidOperation:
+         raise InvoiceError(f"{label} is not a number: {value!r}") from None
+     if not number.is_finite():
+@@ -103,5 +113,73 @@
+     return number
+ 
+ 
++_THOUSANDS_ONLY = " '’  "
++_SIGNS = {"-": "-", "−": "-", "+": ""}
++
++
++def _strip_affix(text):
++    """Remove currency codes, symbols and spaces from both ends of `text`."""
++    text = re.sub(r"^(?:\s|[^\W\d_]+\.?|[^\w\s.,'’+\-−])+", "", text)
++    return re.sub(r"(?:\s|[^\W\d_]+|[^\w\s.,'’+\-−])+$", "", text)
++
++
++def _plain_amount(value):
++    """Return `value` as a plain decimal string, "" if it is ambiguous, None if unreadable.
++
++    Accepts thousands separators (`,` `.` space or apostrophe), a decimal comma
++    or point, a sign, and a currency symbol or code on either side.
++    """
++    text = _strip_affix(value.strip())
++    sign = ""
++    if text[:1] in _SIGNS:
++        sign, text = _SIGNS[text[0]], text[1:]
++    elif text[-1:] in _SIGNS:
++        sign, text = _SIGNS[text[-1]], text[:-1]
++    text = _strip_affix(text.strip())
++    if not text or not re.fullmatch(r"[\d.,'’   ]+", text):
++        return None
++    if not text[0].isdigit() and text[0] not in ".,":
++        return None
++    seps = [c for c in text if not c.isdigit()]
++    if not seps:
++        return sign + text
++    kinds = set(seps)
++    if kinds & set(_THOUSANDS_ONLY) and len(kinds & set(_THOUSANDS_ONLY)) > 1:
++        return None
++    point = None  # the decimal separator, when there is one
++    if kinds <= set(_THOUSANDS_ONLY):
++        pass
++    elif kinds == {",", "."}:
++        point = text[max(text.rfind(","), text.rfind("."))]
++    elif len(kinds) == 1 and len(seps) == 1:
++        head, tail = text.split(seps[0])
++        if len(tail) == 3 and head not in ("", "0") and len(head) <= 3:
++            return ""
++        point = seps[0]
++    elif len(kinds) == 1:
++        pass  # repeated `.` or `,`: thousands
++    else:
++        point = (kinds & {",", "."}).pop()
++    if point is not None:
++        if text.count(point) != 1 or text.rfind(point) < max(map(text.rfind, kinds)):
++            return None
++        whole, _, fraction = text.partition(point)
++        if not fraction:
++            return None
++    else:
++        whole, fraction = text, ""
++    groups = re.split(r"[.,'’   ]", whole)
++    if len(set(c for c in whole if not c.isdigit())) > 1:
++        return None
++    if len(groups) > 1 and not (
++        1 <= len(groups[0]) <= 3 and all(len(g) == 3 for g in groups[1:])
++    ):
++        return None
++    if not groups[0] and len(groups) > 1:
++        return None
++    digits = "".join(groups) or "0"
++    return sign + digits + ("." + fraction if fraction else "")
++
++
+ def _cents(amount):
+     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+--- a/test.py
++++ b/test.py
+@@ -105,6 +105,40 @@
+         with self.assertRaisesRegex(InvoiceError, "line 1 quantity is missing"):
+             extract(lines=lines)
+ 
++    def test_amounts_are_read_as_suppliers_write_them(self):
++        cases = {
++            "1.234,56": "1234.56",
++            "1,234.56": "1234.56",
++            "£1,234.56": "1234.56",
++            "1'050.00 CHF": "1050.00",
++            "EUR 1 234,56": "1234.56",
++            "-1.234,56 €": "-1234.56",
++        }
++        for written, expected in cases.items():
++            with self.subTest(written):
++                lines = [{"description": "x", "quantity": 1, "unit_price": written}]
++                result = extract(lines=lines, total=written)
++                self.assertEqual(result["lines"][0]["unit_price"], Decimal(expected))
++                self.assertEqual(result["total"], Decimal(expected))
++
++    def test_decimal_comma_with_three_decimals_after_a_zero_is_a_decimal(self):
++        lines = [{"description": "Cable, m", "quantity": 3, "unit_price": "0,335"}]
++        result = extract(lines=lines, total="1,01")
++        self.assertEqual(result["lines"][0]["unit_price"], Decimal("0.335"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_amount_readable_two_ways_is_an_error(self):
++        for written in ("1.234", "1,234", "€ 1,234"):
++            with self.subTest(written):
++                with self.assertRaisesRegex(InvoiceError, "total is not a number"):
++                    extract(total=written)
++
++    def test_malformed_separators_are_an_error(self):
++        for written in ("1,23,456", "1.234,56,7", "12,34.567,8", "1,"):
++            with self.subTest(written):
++                with self.assertRaisesRegex(InvoiceError, "total is not a number"):
++                    extract(total=written)
++
+     def test_empty_text_is_refused_before_asking_the_model(self):
+         model = FakeModel(json.dumps(ANSWER))
+         with self.assertRaises(InvoiceError):

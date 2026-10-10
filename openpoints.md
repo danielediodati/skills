@@ -4,17 +4,18 @@ What is still undecided or undone after the design session of 2026-10-06. Decisi
 
 ## Decisions
 
-The decisions taken are in `CONTEXT.md`, numbered 1 to 13. One is open:
+The decisions taken are in `CONTEXT.md`, numbered 1 to 13.
 
-- **What session 1's gate can conclude.** The trial's seams run a fake model, so the coding agent sees one failure reported in a request and never a model that keeps failing after a prompt fix. In the project the drift terms came from, code closing in on a small model after repeated failures is on record (formats and legality, mostly), next to drift designed in before any model ran. Fewer than 12 drifted trials of 36 would say drift is rare on the first move, not that it is residual. To decide before ticket 05 runs: keep the stop rule, or below the gate repeat on one seam with a real small model and an eval the agent can run.
+## The test that gated everything else
 
-## The test that gates everything else
+The plugin rested on one untested claim: a seam charter plus the rule in `AGENTS.md` changes what a coding agent does. Session 1 tested it (`trials/results.md`): without the charter 27 of 36 trials drifted and no agent said so; with it 19 drifted, and agents flagged the line 14 times and stopped 8 times. The claim holds, partly, so **the remaining skills are worth writing**, with two consequences:
 
-The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.md` changes what a coding agent does. It is tested before the remaining skills are written: session 1 in `ROADMAP.md`, six tickets under `docs/work/1-charter-trial/issues/`.
+- **The rule has a back door.** 21 of 36 agents with the charter rewrote it to fit their change. Ticket 07 closes it in `setup` and runs the trials with the charter again.
+- **`edd` must check the diff against the charter as it was before the change**, never the one in the working tree: an agent that moved a line rewrites the charter in the same diff.
 
 Still to check outside that session: load the plugin in a session (`claude --plugin-dir <repo>/a4a`) and see the skills appear. Only the manifests have been validated so far.
 
-Running the trial on this machine, learned in ticket 2: the auto mode classifier refuses to let an agent launch `claude -p` ("Create Unsafe Agents") or delete untracked files, even with the user's yes, so the user runs those by hand. Tickets 5 and 6 launch coding agents and will hit the same wall: plan them as commands for the user, or a permission rule, from the start. `python` is the Microsoft Store stub; tests run with `uv run --no-project python -m unittest`.
+Running the trials on this machine: `trials/run_trials.py` and `trials/judge/run_judge.py` launch `claude -p` and ran without a refusal in tickets 05 and 06; deleting a tracked file was refused once, `git rm` went through. `python` is the Microsoft Store stub; tests run with `uv run --no-project python -m unittest`.
 
 After session 1, the held-out check: a real project with seams in cascade, replaying a commit that drifted.
 

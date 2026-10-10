@@ -1,0 +1,136 @@
+--- a/evals/recommend_products/charter.md
++++ b/evals/recommend_products/charter.md
+@@ -15,6 +15,7 @@
+ ## Constrained
+ - The model sees every in-stock product; code does not narrow the catalogue before the call: a keyword pre-filter drops exactly the products a need-based search is after.
+ - Only real, in-stock ids, each once, at most `limit`: the valid ids are a closed, complete set.
++- A price limit stated in the search (`under 50`, `max 30 euro`, `over 100`, `between 20 and 40`) is a hard limit: code drops any pick outside it, after the call, and the model is told about it. The model still sees every in-stock product. Nothing within the limit gives an empty list: a product the shopper ruled out is worth less than no strip.
+ - Name, price and rating come from the catalogue, never from the model: they are facts the shop already holds.
+ - No valid pick gives an empty strip, with no fallback list: products unrelated to the search are worth less than no strip.
+ - The reason is one line, cut to 80 characters; an empty reason is kept: the space under the product is fixed, and the right product without a reason beats no product.
+--- a/seam.py
++++ b/seam.py
+@@ -9,11 +9,53 @@
+ Pick up to {limit} products from the list that best match the search, best first.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
+ 
+-Products (ID | name | price | rating out of 5):
++{price_note}Products (ID | name | price | rating out of 5):
+ {products}
+ """
+ 
+ LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
++
++_NUMBER = r"(?:[€$£]\s*)?(\d+(?:[.,]\d+)*)"
++_RANGE = re.compile(
++    rf"\b(?:between\s+{_NUMBER}\s+and|from\s+{_NUMBER}\s+to)\s+{_NUMBER}", re.I)
++# (pattern, is_upper_bound, inclusive)
++_BOUNDS = [
++    (re.compile(rf"\b(?:under|below|less\s+than|cheaper\s+than)\s+{_NUMBER}", re.I), True, False),
++    (re.compile(rf"\b(?:max|maximum|up\s+to|at\s+most|no\s+more\s+than|within)\s+{_NUMBER}", re.I), True, True),
++    (re.compile(rf"\b(?:over|above|more\s+than)\s+{_NUMBER}", re.I), False, False),
++    (re.compile(rf"\b(?:from|min|minimum|at\s+least)\s+{_NUMBER}", re.I), False, True),
++]
++
++
++def _amount(text):
++    """Read "29.90", "29,90", "1,000" or "1.500" as a number."""
++    parts = re.split(r"[.,]", text)
++    if len(parts) > 1 and len(parts[-1]) != 3:
++        return float("".join(parts[:-1]) + "." + parts[-1])
++    return float("".join(parts))
++
++
++def price_limits(query):
++    """Return the price range stated in `query` as a list of (is_upper, value, inclusive)."""
++    limits = []
++    match = _RANGE.search(query)
++    if match:
++        low, high = sorted(_amount(g) for g in match.groups() if g)
++        limits += [(False, low, True), (True, high, True)]
++        query = query[:match.start()] + " " + query[match.end():]
++    for pattern, is_upper, inclusive in _BOUNDS:
++        for match in pattern.finditer(query):
++            limits.append((is_upper, _amount(match.group(1)), inclusive))
++    return limits
++
++
++def within_limits(price, limits):
++    for is_upper, value, inclusive in limits:
++        if is_upper and (price > value or (price == value and not inclusive)):
++            return False
++        if not is_upper and (price < value or (price == value and not inclusive)):
++            return False
++    return True
+ 
+ 
+ def recommend_products(query, catalog, model, limit=5):
+@@ -29,9 +71,16 @@
+     if not query or not available:
+         return []
+ 
++    limits = price_limits(query)
++    price_note = (
++        "The search states a price limit: only pick products whose price fits it.\n\n"
++        if limits else ""
++    )
++
+     answer = model(PROMPT.format(
+         query=query,
+         limit=limit,
++        price_note=price_note,
+         products="\n".join(
+             f"{p['id']} | {p['name']} | {p['price']:.2f} | {p['rating']}"
+             for p in available.values()
+@@ -48,6 +97,9 @@
+             continue
+         seen.add(product_id)
+         product = available[product_id]
++        # A price the shopper stated is a hard limit, whatever the model picked.
++        if not within_limits(product["price"], limits):
++            continue
+         picks.append({
+             "id": product_id,
+             "name": product["name"],
+--- a/test.py
++++ b/test.py
+@@ -93,6 +93,39 @@
+         with self.assertRaises(ValueError):
+             recommend("H-100 | Best sound", limit=0)
+ 
++    def test_price_limit_in_the_search_drops_products_outside_it(self):
++        answer = "H-100 | Best sound\nH-200 | Cheap"
++        for query in ["headphones under 50", "headphones below 50", "headphones max 30 euro",
++                      "headphones up to €30", "headphones less than 20", "headphones between 5 and 40"]:
++            with self.subTest(query=query):
++                result = recommend(answer, query=query)
++                self.assertEqual([p["id"] for p in result], ["H-200"])
++
++    def test_lower_bounds_and_ranges(self):
++        answer = "H-100 | Best sound\nH-200 | Cheap"
++        for query in ["headphones over 100", "headphones from 100"]:
++            with self.subTest(query=query):
++                self.assertEqual([p["id"] for p in recommend(answer, query=query)], ["H-100"])
++        result = recommend("C-010 | a\nC-020 | b\nH-200 | c", query="between 8 and 20")
++        self.assertEqual([p["id"] for p in result], ["C-020", "H-200"])
++        result = recommend("C-010 | a\nC-020 | b\nH-200 | c", query="from 8 to 10")
++        self.assertEqual([p["id"] for p in result], ["C-020"])
++
++    def test_nothing_within_the_limit_gives_an_empty_list(self):
++        self.assertEqual(recommend("H-100 | Best sound", query="headphones under 5"), [])
++
++    def test_price_limit_does_not_narrow_what_the_model_sees(self):
++        model = FakeModel("H-200 | Cheap")
++        recommend_products("headphones under 50", CATALOG, model)
++        self.assertIn("H-100 | Aria wireless headphones | 129.00", model.prompts[0])
++        self.assertIn("price limit", model.prompts[0])
++
++    def test_search_without_a_price_is_unchanged(self):
++        model = FakeModel("H-100 | Best sound")
++        result = recommend_products("headphones", CATALOG, model)
++        self.assertEqual([p["id"] for p in result], ["H-100"])
++        self.assertNotIn("price limit", model.prompts[0])
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
