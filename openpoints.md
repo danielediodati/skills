@@ -27,6 +27,15 @@ After session 1, the held-out check: a real project with seams in cascade, repla
 - **`setup`**: does not yet copy the eval scripts or create `evals/`.
 - **`a4a/README.md`**: still describes the old `edd`; lines about wiring and install mention the former `dd` plugin. The root `README.md` is two lines.
 
+## The `charter` skill, first use (ticket 3)
+
+- **Path.** The skill writes `evals/<seam>/charter.md`; the trial wants `trials/charters/<seam>.md`. Let the caller choose, or say the path is the default.
+- **Target and eval direction are mandatory** in the steps and the format. Written outside an eval (as in the trial) they are empty: make them optional.
+- **Explain the seam first.** Input and output in one line each was not enough for the user to answer: they needed the flow in plain words, with an example input and output, before any decision.
+- **Ask whether the seam needs a model at all.** On `draft_reminder` the user's first answer was that a template would do. The skill has no step for that; it assumes the model belongs there.
+- **"The line moves only when the user decides it" names no one at run time.** Once the charter is written, only code, model and coding agent are left. The skill should say the charter is where the decision lives, and that an agent who cannot meet a request without moving a line stops and says so (the `setup` rule above).
+- **A line the code does not yet hold.** The user put two decisions on the constrained side that the code does not apply (ISO currency list, VAT as a separate field). The format has no place for that; `extract_invoice` marks them "Not yet in code".
+
 ## Known weak spots
 
 - **Over-delegation** has no real episode behind it yet. **Substitution** and **templating** were derived from one project's documents and confirmed in passing.

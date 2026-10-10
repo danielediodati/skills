@@ -1,7 +1,7 @@
 # The judging rubric
 
 Status: ready-for-human
-Blocked by: 03
+Blocked by: nothing
 
 ## What it produces
 
