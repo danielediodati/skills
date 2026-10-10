@@ -1,0 +1,86 @@
+--- a/seam.py
++++ b/seam.py
+@@ -20,6 +20,8 @@
+ {body}
+ """
+ 
++ELLIPSIS = "…"
++SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+ FIELD = re.compile(r"^\W*(queue|urgency|summary)\W*:\s*(.+)$", re.IGNORECASE)
+ 
+ 
+@@ -53,9 +55,34 @@
+     return {
+         "queue": queue,
+         "urgency": urgency,
+-        "summary": summary[:MAX_SUMMARY_CHARS],
++        "summary": _fit(summary, MAX_SUMMARY_CHARS),
+         "respond_within_hours": RESPOND_WITHIN_HOURS[urgency],
+     }
++
++
++def _fit(text, limit):
++    """Fit one line into `limit` characters without cutting a word.
++
++    Whole leading sentences are kept when they fit; otherwise the text is cut
++    at a word boundary. A shortened text ends with an ellipsis.
++    """
++    if len(text) <= limit:
++        return text
++
++    kept = ""
++    for sentence in SENTENCE_END.split(text):
++        candidate = f"{kept} {sentence}" if kept else sentence
++        if len(candidate) + len(" " + ELLIPSIS) > limit:
++            break
++        kept = candidate
++    if kept:
++        return f"{kept} {ELLIPSIS}"
++
++    room = limit - len(ELLIPSIS)
++    cut = text[:room]
++    if text[room] != " " and " " in cut:
++        cut = cut.rsplit(" ", 1)[0]
++    return cut.rstrip(" ,;:-") + ELLIPSIS
+ 
+ 
+ def _parse_fields(answer):
+--- a/test.py
++++ b/test.py
+@@ -77,10 +77,32 @@
+         self.assertEqual(result["urgency"], "urgent")
+         self.assertEqual(result["respond_within_hours"], 1)
+ 
+-    def test_summary_is_one_line_and_capped(self):
+-        result = triage("queue: billing\nurgency: low\nsummary:  a   b " + "c" * 200)
+-        self.assertTrue(result["summary"].startswith("a b ccc"))
+-        self.assertEqual(len(result["summary"]), 120)
++    def test_summary_is_one_line(self):
++        result = triage("queue: billing\nurgency: low\nsummary:  a   b  c")
++        self.assertEqual(result["summary"], "a b c")
++
++    def test_long_summary_is_cut_at_a_word_and_marked(self):
++        words = " ".join(["word"] * 60)
++        result = triage("queue: billing\nurgency: low\nsummary: " + words)
++        summary = result["summary"]
++        self.assertLessEqual(len(summary), 120)
++        self.assertTrue(summary.endswith("word…"))
++        self.assertTrue(set(summary[:-1].split()) == {"word"})
++
++    def test_long_summary_keeps_whole_sentences(self):
++        first = "The customer wants to keep the subscription for three seats."
++        second = "They want to cancel the remaining seats at the end of the month."
++        result = triage(f"queue: account\nurgency: low\nsummary: {first} {second}")
++        self.assertEqual(result["summary"], first + " …")
++
++    def test_unbroken_text_is_cut_and_marked(self):
++        result = triage("queue: billing\nurgency: low\nsummary: " + "c" * 200)
++        self.assertEqual(result["summary"], "c" * 119 + "…")
++
++    def test_summary_that_fits_is_unchanged(self):
++        text = "c" * 120
++        result = triage("queue: billing\nurgency: low\nsummary: " + text)
++        self.assertEqual(result["summary"], text)
+ 
+     def test_only_the_start_of_a_long_body_is_sent(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")

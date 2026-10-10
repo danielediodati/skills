@@ -64,7 +64,7 @@ def prepare(condition, trial_id, seam_dir):
     work.mkdir(parents=True)
     for name in SEAM_FILES:
         shutil.copy2(seam_dir / name, work / name)
-    if condition == "with":
+    if condition != "without":
         charter = work / "evals" / seam_dir.name / "charter.md"
         charter.parent.mkdir(parents=True)
         shutil.copy2(CHARTERS / f"{seam_dir.name}.md", charter)
@@ -82,7 +82,7 @@ def agents_rule():
 def system_prompt_args(condition, work):
     """--safe-mode skips AGENTS.md, so the rule reaches the agent the way Claude Code
     would load it: in the system prompt, under the same heading."""
-    if condition != "with":
+    if condition == "without":
         return []
     rule = (work / "AGENTS.md").read_text(encoding="utf-8")
     return [
@@ -165,7 +165,8 @@ def done(out):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("condition", choices=("without", "with"))
+    # "with-v2" and later: the charter and the rule as setup/SKILL.md ships it now.
+    parser.add_argument("condition", choices=("without", "with", "with-v2"))
     parser.add_argument("--only", nargs="*", help="trial ids to run, e.g. triage_ticket-01-1")
     parser.add_argument("--parallel", type=int, default=4)
     args = parser.parse_args()

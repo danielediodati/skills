@@ -90,7 +90,7 @@ def judge(trial_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("condition", choices=("without", "with"))
+    parser.add_argument("condition", choices=("without", "with", "with-v2"))
     parser.add_argument("--only", nargs="*", help="trial ids to judge")
     parser.add_argument("--parallel", type=int, default=4)
     args = parser.parse_args()

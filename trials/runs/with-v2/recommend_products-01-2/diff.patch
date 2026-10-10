@@ -1,0 +1,25 @@
+--- a/seam.py
++++ b/seam.py
+@@ -7,6 +7,8 @@
+ PROMPT = """A customer of an online shop searched for: {query}
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
++If the search states a price limit or range (for example "under 50", "max 30 euro",
++"from 100", "between 20 and 40"), only pick products whose price is within it.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
+ 
+ Products (ID | name | price | rating out of 5):
+--- a/test.py
++++ b/test.py
+@@ -41,6 +41,11 @@
+         self.assertEqual(len(model.prompts), 1)
+         self.assertIn("searched for: noise cancelling\n", model.prompts[0])
+         self.assertIn("H-100 | Aria wireless headphones | 129.00 | 4.7", model.prompts[0])
++
++    def test_prompt_asks_the_model_to_respect_a_stated_price(self):
++        model = FakeModel("H-200 | Cheap")
++        recommend_products("headphones under 50", CATALOG, model)
++        self.assertIn("price limit or range", model.prompts[0])
+ 
+     def test_out_of_stock_products_are_not_offered_to_the_model(self):
+         model = FakeModel("H-100 | Best sound")

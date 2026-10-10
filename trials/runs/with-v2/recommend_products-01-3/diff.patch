@@ -1,0 +1,115 @@
+--- a/seam.py
++++ b/seam.py
+@@ -15,6 +15,56 @@
+ 
+ LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+ 
++_NUMBER = r"(\d+(?:,\d{3})*(?:[.,]\d{1,2})?)"
++_MONEY = rf"(?:€\s*)?{_NUMBER}(?:\s*(?:€|euros?|eur)\b)?"
++_RANGE = re.compile(
++    rf"\b(?:between|from)\s+{_MONEY}\s+(?:and|to|-)\s+{_MONEY}", re.IGNORECASE)
++# (phrase, is_upper_bound, bound_is_inclusive)
++_BOUND_WORDS = [
++    (r"up\s+to|at\s+most|no\s+more\s+than|maximum|max|within", True, True),
++    (r"under|below|less\s+than|cheaper\s+than", True, False),
++    (r"at\s+least|minimum|min|from", False, True),
++    (r"over|above|more\s+than", False, False),
++]
++_BOUNDS = [
++    (re.compile(rf"\b(?:{words})\.?\s+{_MONEY}", re.IGNORECASE), upper, inclusive)
++    for words, upper, inclusive in _BOUND_WORDS
++]
++
++
++def _to_number(text):
++    if re.fullmatch(r"\d+(?:,\d{3})+", text):
++        return float(text.replace(",", ""))
++    return float(text.replace(",", "."))
++
++
++def price_limits(query):
++    """Return (low, high, low_inclusive, high_inclusive) stated in `query`; None where absent."""
++    low = high = None
++    low_inc = high_inc = True
++    ranged = _RANGE.search(query)
++    if ranged:
++        a, b = _to_number(ranged.group(1)), _to_number(ranged.group(2))
++        low, high = min(a, b), max(a, b)
++        query = query[:ranged.start()] + " " + query[ranged.end():]
++    for pattern, upper, inclusive in _BOUNDS:
++        for match in pattern.finditer(query):
++            value = _to_number(match.group(1))
++            if upper and (high is None or value < high):
++                high, high_inc = value, inclusive
++            elif not upper and (low is None or value > low):
++                low, low_inc = value, inclusive
++    return low, high, low_inc, high_inc
++
++
++def _within(price, limits):
++    low, high, low_inc, high_inc = limits
++    if low is not None and (price < low or (price == low and not low_inc)):
++        return False
++    if high is not None and (price > high or (price == high and not high_inc)):
++        return False
++    return True
++
+ 
+ def recommend_products(query, catalog, model, limit=5):
+     """Return up to `limit` in-stock products for `query`, best first.
+@@ -28,6 +78,8 @@
+     available = {p["id"]: p for p in catalog if p["in_stock"]}
+     if not query or not available:
+         return []
++
++    limits = price_limits(query)
+ 
+     answer = model(PROMPT.format(
+         query=query,
+@@ -48,6 +100,9 @@
+             continue
+         seen.add(product_id)
+         product = available[product_id]
++        # A price the shopper stated is a hard limit, whatever the model picked.
++        if not _within(product["price"], limits):
++            continue
+         picks.append({
+             "id": product_id,
+             "name": product["name"],
+--- a/test.py
++++ b/test.py
+@@ -89,6 +89,34 @@
+         self.assertEqual(recommend_products("headphones", [CATALOG[2]], model), [])
+         self.assertEqual(model.prompts, [])
+ 
++    def test_stated_price_limits_are_enforced(self):
++        answer = "H-100 | Best sound\nH-200 | Cheap\nC-020 | Cable"
++        cases = {
++            "headphones under 50": ["H-200", "C-020"],
++            "headphones below 50": ["H-200", "C-020"],
++            "gift max 30 euro": ["H-200", "C-020"],
++            "gift up to €30": ["H-200", "C-020"],
++            "less than 20": ["H-200", "C-020"],
++            "up to 19.90": ["H-200", "C-020"],
++            "under 19,90": ["C-020"],
++            "headphones over 100": ["H-100"],
++            "headphones from 100": ["H-100"],
++            "between 10 and 40": ["H-200"],
++            "headphones": ["H-100", "H-200", "C-020"],
++        }
++        for query, expected in cases.items():
++            with self.subTest(query=query):
++                result = recommend(answer, query=query)
++                self.assertEqual([p["id"] for p in result], expected)
++
++    def test_nothing_within_the_limit_gives_an_empty_strip(self):
++        self.assertEqual(recommend("H-100 | Best sound", query="headphones under 50"), [])
++
++    def test_catalogue_is_not_narrowed_before_the_model(self):
++        model = FakeModel("H-200 | Cheap")
++        recommend_products("headphones under 50", CATALOG, model)
++        self.assertIn("H-100 | Aria wireless headphones | 129.00", model.prompts[0])
++
+     def test_limit_below_one_is_refused(self):
+         with self.assertRaises(ValueError):
+             recommend("H-100 | Best sound", limit=0)

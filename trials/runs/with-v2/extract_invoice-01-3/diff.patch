@@ -1,0 +1,145 @@
+--- a/seam.py
++++ b/seam.py
+@@ -2,6 +2,7 @@
+ 
+ import json
+ import re
++import unicodedata
+ from datetime import date
+ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+ 
+@@ -95,7 +96,10 @@
+     if value is None or isinstance(value, bool):
+         raise InvoiceError(f"{label} is missing")
+     try:
+-        number = Decimal(str(value).strip())
++        if isinstance(value, str):
++            number = _parse_amount(value, label)
++        else:
++            number = Decimal(str(value).strip())
+     except InvalidOperation:
+         raise InvoiceError(f"{label} is not a number: {value!r}") from None
+     if not number.is_finite():
+@@ -103,5 +107,81 @@
+     return number
+ 
+ 
++def _parse_amount(text, label):
++    """Read an amount as suppliers write it: `1.234,56`, `£1,234.56`, `1'050.00 CHF`.
++
++    A lone separator followed by exactly three digits (`1,234`) could be a thousands
++    separator or a decimal one; it is refused rather than guessed.
++    """
++    fail = InvoiceError(f"{label} is not a number: {text!r}")
++    s = text.strip()
++    negative = False
++    if s.startswith("(") and s.endswith(")"):
++        negative, s = True, s[1:-1].strip()
++    # Peel currency symbols, codes, spaces and signs off both ends.
++    signs = 0
++    while s:
++        first, last = s[0], s[-1]
++        if first in "-−" or last in "-−":
++            signs += 1
++            s = s[1:] if first in "-−" else s[:-1]
++        elif first in "+" or first.isspace() or first.isalpha() or unicodedata.category(first) == "Sc":
++            s = s[1:]
++        elif last in "+" or last.isspace() or last.isalpha() or unicodedata.category(last) == "Sc":
++            s = s[:-1]
++        else:
++            break
++    if signs > 1 or not re.fullmatch(r"[\d.,'’   ]*\d[\d.,'’   ]*|[.,]\d+", s):
++        raise fail
++    negative = negative or signs == 1
++
++    grouped = re.search(r"['’   ]", s) is not None
++    if grouped:
++        if re.search(r"[.,]['’   ]|['’   ][.,]", s):
++            raise fail
++        groups = re.split(r"['’   ]+", s)
++        # The last group may carry one decimal separator.
++        tail = re.split(r"[.,]", groups[-1])
++        if len(tail) > 2:
++            raise fail
++        groups[-1:] = tail[:1]
++        integer, fraction = groups, tail[1] if len(tail) == 2 else ""
++        if not _grouped_by_three(integer):
++            raise fail
++        integer_digits = "".join(integer)
++    else:
++        marks = [c for c in s if c in ".,"]
++        if not marks:
++            integer_digits, fraction = s, ""
++        elif len(set(marks)) == 2:
++            decimal = marks[-1]
++            if marks.count(decimal) != 1:
++                raise fail
++            whole, fraction = s.split(decimal)
++            groups = whole.split(marks[0])
++            if not _grouped_by_three(groups):
++                raise fail
++            integer_digits = "".join(groups)
++        elif len(marks) > 1:
++            groups = s.split(marks[0])
++            if not _grouped_by_three(groups):
++                raise fail
++            integer_digits, fraction = "".join(groups), ""
++        else:
++            whole, fraction = s.split(marks[0])
++            if len(fraction) == 3 and 1 <= len(whole) <= 3 and whole != "0":
++                raise InvoiceError(
++                    f"{label} is not a number: {text!r} (separator is ambiguous)")
++            integer_digits = whole
++    digits = f"{integer_digits or '0'}.{fraction or '0'}"
++    number = Decimal(digits)
++    return -number if negative else number
++
++
++def _grouped_by_three(groups):
++    return (len(groups[0]) in (1, 2, 3) and groups[0].isdigit()
++            and all(len(g) == 3 and g.isdigit() for g in groups[1:]))
++
++
+ def _cents(amount):
+     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+--- a/test.py
++++ b/test.py
+@@ -100,6 +100,38 @@
+         with self.assertRaisesRegex(InvoiceError, "total is not a number"):
+             extract(total="three hundred")
+ 
++    def test_amounts_as_suppliers_write_them_are_read(self):
++        cases = {
++            "1.234,56": "1234.56",
++            "1,234.56": "1234.56",
++            "£1,234.56": "1234.56",
++            "1'050.00 CHF": "1050.00",
++            "EUR 1 234,56": "1234.56",
++            "1.234.567,89": "1234567.89",
++            "1,234,567": "1234567",
++            "12,5": "12.5",
++            "1234,567": "1234.567",
++            "0.335": "0.335",
++            "-€12,50": "-12.50",
++            "(12.50)": "-12.50",
++            "$ 99": "99",
++        }
++        for written, expected in cases.items():
++            with self.subTest(written):
++                lines = [{"description": "x", "quantity": 1, "unit_price": written}]
++                result = extract(lines=lines, total=expected)
++                self.assertEqual(result["lines"][0]["unit_price"], Decimal(expected))
++
++    def test_total_with_currency_and_thousands_is_read(self):
++        lines = [{"description": "x", "quantity": 1, "unit_price": "1234.56"}]
++        self.assertEqual(extract(lines=lines, total="£1,234.56")["status"], "ok")
++
++    def test_ambiguous_amounts_are_refused(self):
++        for written in ["1,234", "1.234", "£1.234", "1,23.456", "1.234,56,7", "12 EUR 5", "1 234.5.6"]:
++            with self.subTest(written):
++                with self.assertRaisesRegex(InvoiceError, "total is not a number"):
++                    extract(total=written)
++
+     def test_missing_quantity_is_an_error(self):
+         lines = [{"description": "Delivery", "unit_price": 15}]
+         with self.assertRaisesRegex(InvoiceError, "line 1 quantity is missing"):

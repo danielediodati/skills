@@ -1,0 +1,94 @@
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@
+ 
+ - `queue`: one of `billing`, `technical`, `account`, `shipping`, `general`
+ - `urgency`: one of `low`, `normal`, `high`, `urgent`; enterprise customers are raised one level
+-- `summary`: a single line of at most 120 characters, shown in the agents' ticket list
++- `summary`: a single line of at most 120 characters, shown in the agents' ticket list; a longer summary is shortened to whole sentences when the first ones fit, otherwise at a word boundary, and ends with `…` to show it was shortened
+ - `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
+ 
+ Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
+--- a/seam.py
++++ b/seam.py
+@@ -19,6 +19,9 @@
+ 
+ {body}
+ """
++
++ELLIPSIS = "…"
++SENTENCE_END = re.compile(r"[.!?]+(?=\s)")
+ 
+ FIELD = re.compile(r"^\W*(queue|urgency|summary)\W*:\s*(.+)$", re.IGNORECASE)
+ 
+@@ -53,9 +56,33 @@
+     return {
+         "queue": queue,
+         "urgency": urgency,
+-        "summary": summary[:MAX_SUMMARY_CHARS],
++        "summary": _fit(summary, MAX_SUMMARY_CHARS),
+         "respond_within_hours": RESPOND_WITHIN_HOURS[urgency],
+     }
++
++
++def _fit(text, limit):
++    """Shorten `text` to `limit` characters without cutting a word.
++
++    Whole leading sentences are kept when they fit; otherwise the text is cut
++    at a word boundary. A shortened text ends with an ellipsis.
++    """
++    if len(text) <= limit:
++        return text
++
++    # Room for the marker: " …" after whole sentences.
++    kept = ""
++    for match in SENTENCE_END.finditer(text):
++        if match.end() + 2 > limit:
++            break
++        kept = text[:match.end()]
++    if kept:
++        return kept + " " + ELLIPSIS
++
++    head = text[:limit - 1]
++    if text[limit - 1] != " " and " " in head:
++        head = head[:head.rindex(" ")]
++    return head.rstrip(" ,;:-") + ELLIPSIS
+ 
+ 
+ def _parse_fields(answer):
+--- a/test.py
++++ b/test.py
+@@ -79,8 +79,32 @@
+ 
+     def test_summary_is_one_line_and_capped(self):
+         result = triage("queue: billing\nurgency: low\nsummary:  a   b " + "c" * 200)
+-        self.assertTrue(result["summary"].startswith("a b ccc"))
++        self.assertEqual(result["summary"], "a b…")
++
++    def test_long_summary_is_not_cut_inside_a_word(self):
++        text = "The customer would like to keep the subscription for the three seats used by the design team but wants to cancel the remaining ones."
++        result = triage("queue: billing\nurgency: low\nsummary: " + text)
++        summary = result["summary"]
++        self.assertLessEqual(len(summary), 120)
++        self.assertTrue(summary.endswith("…"))
++        self.assertTrue(text.startswith(summary[:-1]))
++        self.assertEqual(text[len(summary) - 1], " ")
++
++    def test_whole_sentences_are_preferred_to_a_fragment(self):
++        first = "Customer confirms the replacement router works."
++        text = first + " Asks us not to close the ticket until the old one has been collected by the courier."
++        result = triage("queue: shipping\nurgency: low\nsummary: " + text)
++        self.assertEqual(result["summary"], first + " …")
++
++    def test_summary_that_fits_is_unchanged(self):
++        text = "x" * 119 + "."
++        result = triage("queue: billing\nurgency: low\nsummary: " + text)
++        self.assertEqual(result["summary"], text)
++
++    def test_single_long_word_is_still_capped(self):
++        result = triage("queue: billing\nurgency: low\nsummary: " + "c" * 200)
+         self.assertEqual(len(result["summary"]), 120)
++        self.assertTrue(result["summary"].endswith("…"))
+ 
+     def test_only_the_start_of_a_long_body_is_sent(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")

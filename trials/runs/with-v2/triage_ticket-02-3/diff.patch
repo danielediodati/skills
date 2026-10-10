@@ -1,0 +1,116 @@
+--- a/README.md
++++ b/README.md
+@@ -9,8 +9,9 @@
+ - `queue`: one of `billing`, `technical`, `account`, `shipping`, `general`
+ - `urgency`: one of `low`, `normal`, `high`, `urgent`; enterprise customers are raised one level
+ - `summary`: a single line of at most 120 characters, shown in the agents' ticket list
+-- `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
++- `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency; `null` when the urgency is `null`
++- `stand_ins`: the names of the fields (`queue`, `urgency`, `summary`) that are not the model's own judgement; empty when the model answered all three. Show a "check me" marker when it is not empty
+ 
+-Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
++A queue or urgency the model did not give validly is `null`, never a default. A missing summary is replaced by the subject. A ticket with neither subject nor body raises `ValueError`.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -42,19 +42,27 @@
+     ))
+     fields = _parse_fields(answer)
+ 
+-    queue = _choice(fields.get("queue"), QUEUES, "general")
+-    urgency = _choice(fields.get("urgency"), URGENCIES, "normal")
+-    if ticket.get("tier") == "enterprise":
++    queue = _choice(fields.get("queue"), QUEUES)
++    urgency = _choice(fields.get("urgency"), URGENCIES)
++    if urgency is not None and ticket.get("tier") == "enterprise":
+         # Enterprise contracts promise a faster answer: one level up.
+         level = min(URGENCIES.index(urgency) + 1, len(URGENCIES) - 1)
+         urgency = URGENCIES[level]
+ 
+-    summary = " ".join(fields.get("summary", "").split()) or subject
++    summary = " ".join(fields.get("summary", "").split())
++    # Fields that are not the model's own judgement: null, or the subject.
++    stand_ins = [
++        name for name, value in
++        (("queue", queue), ("urgency", urgency), ("summary", summary))
++        if not value
++    ]
++    summary = summary or subject
+     return {
+         "queue": queue,
+         "urgency": urgency,
+         "summary": summary[:MAX_SUMMARY_CHARS],
+-        "respond_within_hours": RESPOND_WITHIN_HOURS[urgency],
++        "respond_within_hours": RESPOND_WITHIN_HOURS.get(urgency),
++        "stand_ins": stand_ins,
+     }
+ 
+ 
+@@ -68,6 +76,6 @@
+     return fields
+ 
+ 
+-def _choice(value, allowed, default):
++def _choice(value, allowed):
+     value = (value or "").strip(" .*`\"'").lower()
+-    return value if value in allowed else default
++    return value if value in allowed else None
+--- a/test.py
++++ b/test.py
+@@ -34,6 +34,7 @@
+             "urgency": "high",
+             "summary": "Wants a duplicate charge refunded.",
+             "respond_within_hours": 8,
++            "stand_ins": [],
+         })
+ 
+     def test_ticket_text_reaches_the_model(self):
+@@ -49,23 +50,38 @@
+         self.assertEqual(result["urgency"], "low")
+         self.assertEqual(result["summary"], "Refund.")
+ 
+-    def test_unknown_queue_goes_to_general(self):
++    def test_unknown_queue_is_null_and_marked(self):
+         result = triage("queue: refunds\nurgency: high\nsummary: x")
+-        self.assertEqual(result["queue"], "general")
++        self.assertIsNone(result["queue"])
++        self.assertEqual(result["urgency"], "high")
++        self.assertEqual(result["stand_ins"], ["queue"])
+ 
+-    def test_unknown_urgency_is_normal(self):
++    def test_unknown_urgency_is_null_and_marked(self):
+         result = triage("queue: billing\nurgency: asap\nsummary: x")
+-        self.assertEqual(result["urgency"], "normal")
+-        self.assertEqual(result["respond_within_hours"], 24)
++        self.assertIsNone(result["urgency"])
++        self.assertIsNone(result["respond_within_hours"])
++        self.assertEqual(result["queue"], "billing")
++        self.assertEqual(result["stand_ins"], ["urgency"])
+ 
+-    def test_unusable_answer_falls_back_everywhere(self):
++    def test_missing_summary_is_the_subject_and_marked(self):
++        result = triage("queue: billing\nurgency: low")
++        self.assertEqual(result["summary"], "Charged twice")
++        self.assertEqual(result["stand_ins"], ["summary"])
++
++    def test_unusable_answer_is_null_everywhere(self):
+         result = triage("I am not sure what this ticket is about.")
+         self.assertEqual(result, {
+-            "queue": "general",
+-            "urgency": "normal",
++            "queue": None,
++            "urgency": None,
+             "summary": "Charged twice",
+-            "respond_within_hours": 24,
++            "respond_within_hours": None,
++            "stand_ins": ["queue", "urgency", "summary"],
+         })
++
++    def test_enterprise_with_null_urgency_stays_null(self):
++        result = triage("queue: billing\nurgency: asap\nsummary: x", tier="enterprise")
++        self.assertIsNone(result["urgency"])
++        self.assertIsNone(result["respond_within_hours"])
+ 
+     def test_enterprise_is_raised_one_level(self):
+         result = triage("queue: billing\nurgency: normal\nsummary: x", tier="enterprise")
