@@ -1,11 +1,12 @@
 """Run the charter trials: each request given to a coding agent on a fresh copy of its seam.
 
-    uv run --no-project python trials/run_trials.py without [--only triage_ticket-01-1] [--parallel 4]
+    uv run --no-project python trials/run_trials.py without --model sonnet [--requests 04 05]
+        [--only triage_ticket-04-1] [--parallel 4] [--runs DIR]
 
 Each trial runs in its own directory under WORK_ROOT (CHARTER_TRIAL_WORK, by default
 charter-trial in the system temporary directory), outside the repo, holding only the
 seam's files. Its diff, the agent's final answer and the session's numbers land in
-trials/runs/<condition>/<seam>-<request>-<repeat>/. A trial whose folder already holds a
+trials/runs/<model>/<condition>/<seam>-<request>-<repeat>/. A trial whose folder already holds a
 session.json without an error is skipped, so an interrupted or failed run resumes.
 """
 
@@ -29,7 +30,7 @@ SETUP_SKILL = TRIALS.parent / "a4a" / "skills" / "setup" / "SKILL.md"
 RUNS = TRIALS / "runs"
 WORK_ROOT = Path(os.environ.get("CHARTER_TRIAL_WORK") or Path(tempfile.gettempdir()) / "charter-trial")
 
-MODEL = "claude-sonnet-5-5"
+MODELS = {"sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"}
 REPEATS = 3
 SEAM_FILES = ("seam.py", "test.py", "README.md")
 IGNORED_DIRS = {"__pycache__", ".pytest_cache"}
@@ -39,7 +40,6 @@ TIMEOUT_SECONDS = 30 * 60
 # (--safe-mode), file tools and Python only, nothing else approved.
 CLAUDE_ARGS = [
     "-p",
-    "--model", MODEL,
     "--safe-mode",
     "--output-format", "json",
     "--tools", "Read,Edit,Write,Glob,Grep,Bash",
@@ -49,16 +49,18 @@ CLAUDE_ARGS = [
 ]
 
 
-def trials(condition):
+def trials(runs, model, condition, requests=None):
     for seam_dir in sorted(p for p in SEAMS.iterdir() if p.is_dir()):
         for request in sorted((seam_dir / "requests").glob("*.md")):
+            if requests and request.stem not in requests:
+                continue
             for repeat in range(1, REPEATS + 1):
                 trial_id = f"{seam_dir.name}-{request.stem}-{repeat}"
-                yield trial_id, seam_dir, request, RUNS / condition / trial_id
+                yield trial_id, seam_dir, request, runs / model / condition / trial_id
 
 
-def prepare(condition, trial_id, seam_dir):
-    work = WORK_ROOT / condition / trial_id
+def prepare(model, condition, trial_id, seam_dir):
+    work = WORK_ROOT / model / condition / trial_id
     if work.exists():
         shutil.rmtree(work)
     work.mkdir(parents=True)
@@ -120,11 +122,12 @@ def session_env():
     return env
 
 
-def run(condition, trial_id, seam_dir, request, out):
-    work = prepare(condition, trial_id, seam_dir)
+def run(model, condition, trial_id, seam_dir, request, out):
+    work = prepare(model, condition, trial_id, seam_dir)
     before = snapshot(work)
     completed = subprocess.run(
-        [shutil.which("claude"), *CLAUDE_ARGS, *system_prompt_args(condition, work)],
+        [shutil.which("claude"), *CLAUDE_ARGS, "--model", MODELS[model],
+         *system_prompt_args(condition, work)],
         input=request.read_text(encoding="utf-8"),
         cwd=work,
         env=session_env(),
@@ -144,7 +147,7 @@ def run(condition, trial_id, seam_dir, request, out):
     session = {
         "trial": trial_id,
         "condition": condition,
-        "model": MODEL,
+        "model": MODELS[model],
         "request": request.relative_to(TRIALS).as_posix(),
         "exit_code": completed.returncode,
         **{key: result.get(key) for key in (
@@ -167,17 +170,20 @@ def main():
     parser = argparse.ArgumentParser()
     # "with-v2" and later: the charter and the rule as setup/SKILL.md ships it now.
     parser.add_argument("condition", choices=("without", "with", "with-v2"))
+    parser.add_argument("--model", choices=MODELS, required=True, help="the coding agent")
+    parser.add_argument("--requests", nargs="*", help="request names to run, e.g. 04 05")
     parser.add_argument("--only", nargs="*", help="trial ids to run, e.g. triage_ticket-01-1")
     parser.add_argument("--parallel", type=int, default=4)
+    parser.add_argument("--runs", type=Path, default=RUNS, help="where runs land; a dry check goes elsewhere")
     args = parser.parse_args()
 
     todo = [
-        t for t in trials(args.condition)
+        t for t in trials(args.runs.resolve(), args.model, args.condition, args.requests)
         if (not args.only or t[0] in args.only) and not done(t[3])
     ]
     print(f"{len(todo)} trials to run", flush=True)
     with concurrent.futures.ThreadPoolExecutor(args.parallel) as pool:
-        futures = [pool.submit(run, args.condition, *t) for t in todo]
+        futures = [pool.submit(run, args.model, args.condition, *t) for t in todo]
         for future in concurrent.futures.as_completed(futures):
             trial_id, session = future.result()
             status = "ERROR" if session.get("is_error") else "ok"

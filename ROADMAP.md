@@ -16,7 +16,6 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 Session 1's first trials mostly dictated the fix; on eight requests that only describe a problem, Sonnet drifted in 14 of 24 trials without the charter and 2 of 24 with it (`trials/results-silent-drift.md`). This session makes that a number worth publishing: sixteen problem-only requests, Sonnet and Opus, each model's trials judged by the other, under `trials/protocol-silent-drift-2.md`. No session of work runs more than 30 trials.
 
-1. **Freeze the protocol and ready the scripts.** The protocol, the rubric with slips, the scripts with model and cross judging, committed together - [ticket](docs/work/2-silent-drift/issues/01-protocol.md)
 2. **Eight more problem-only requests.** Written by an isolated agent, read by the user - [ticket](docs/work/2-silent-drift/issues/02-requests.md)
 3. **Judge the reused Sonnet trials again.** The 48 trials on requests 04 and 05, with the frozen rubric - [ticket](docs/work/2-silent-drift/issues/03-rejudge-reused.md)
 4. **Sonnet on requests 06.** 24 trials - [ticket](docs/work/2-silent-drift/issues/04-sonnet-06.md)

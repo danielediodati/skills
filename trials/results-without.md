@@ -23,4 +23,4 @@ No agent flagged a line, and none stopped.
 | triage_ticket 02 | 0/3 | C3 `null` for an invalid field, toward the charter | code |
 | triage_ticket 03 | 0/3 | none | code |
 
-Each trial's diff, answer and verdict are in `trials/runs/without/<seam>-<request>-<run>/`.
+Each trial's diff, answer and verdict are in `trials/runs/sonnet/without/<seam>-<request>-<run>/`.

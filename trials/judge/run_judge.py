@@ -1,10 +1,13 @@
-"""Judge trials with the rubric, blind to the condition.
+"""Judge trials with the rubric, blind to the condition and to the agent's model.
 
-    uv run --no-project python trials/judge/run_judge.py without [--only triage_ticket-01-1] [--parallel 4]
+    uv run --no-project python trials/judge/run_judge.py without --model sonnet
+        [--only triage_ticket-04-1] [--parallel 4] [--redo] [--runs DIR]
 
-For each trial folder under trials/runs/<condition>/, the judge gets the rubric's
+For each trial folder under trials/runs/<model>/<condition>/, the judge gets the rubric's
 instructions and the five inputs, and its answer lands in verdict.md beside the trial.
-A trial that already holds verdict.md is skipped.
+The judge is the model that did not run the trial, read from its session.json, and is
+recorded in judge.json. A trial whose verdict has a row for every charter line is skipped;
+a verdict missing a line is judged again.
 """
 
 import argparse
@@ -20,15 +23,18 @@ JUDGE = Path(__file__).resolve().parent
 TRIALS = JUDGE.parent
 RUBRIC = JUDGE / "rubric.md"
 
-MODEL = "claude-opus-5-5"
+# Each model's trials are judged by the other one.
+JUDGES = {"claude-sonnet-5-5": "claude-opus-5-5", "claude-opus-5-5": "claude-sonnet-5-5"}
+AGENTS = ("sonnet", "opus")  # the folders under trials/runs/
 SEAM_FILES = ("seam.py", "test.py", "README.md")
 TIMEOUT_SECONDS = 15 * 60
 
 # What would reveal the condition: the charter file and the AGENTS.md rule in the diff,
-# and any sentence of the answer naming them.
+# and any sentence of the answer naming them. A sentence naming a model would reveal the agent.
 REVEALING_PATHS = re.compile(r"^(evals/|AGENTS\.md$)")
-REVEALING_WORDS = re.compile(r"charter|AGENTS\.md|evals/", re.IGNORECASE)
-SENTENCE = re.compile(r"[^.!?\n]*(?:[.!?]+|\n|$)")
+REVEALING_WORDS = re.compile(r"charter|AGENTS\.md|evals/|\bsonnet\b|\bopus\b", re.IGNORECASE)
+# A dot inside a word ("AGENTS.md", "seam.py") does not end the sentence.
+SENTENCE = re.compile(r"(?:[^.!?\n]|[.!?]+(?=[^\s.!?]))*(?:[.!?]+|\n|$)")
 
 
 def instructions():
@@ -73,9 +79,45 @@ def prompt(trial_dir):
     return "\n".join(parts)
 
 
+def charter_lines(seam):
+    """The ids the rubric gives the charter's bullets: F1... free, C1... constrained, B1... budget."""
+    ids, prefix, count = [], None, 0
+    for line in (TRIALS / "charters" / f"{seam}.md").read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            prefix = {"## Free": "F", "## Constrained": "C", "## Target and budget": "B"}.get(line.strip())
+            count = 0
+        elif prefix and line.startswith("- "):
+            count += 1
+            ids.append(f"{prefix}{count}")
+    return ids
+
+
+def missing_lines(verdict, seam):
+    """Charter lines the verdict has no row for: the judge must answer every one."""
+    rows = set(re.findall(r"(?m)^\|\s*([FCB]\d+)\s*\|", verdict))
+    return [line for line in charter_lines(seam) if line not in rows]
+
+
+def seam_of(trial_dir):
+    session = json.loads((trial_dir / "session.json").read_text(encoding="utf-8"))
+    return session["request"].split("/")[1]
+
+
+def judged(trial_dir):
+    """A trial is judged once its verdict has a row for every line; an incomplete one is judged again."""
+    verdict = trial_dir / "verdict.md"
+    return verdict.exists() and not missing_lines(verdict.read_text(encoding="utf-8"), seam_of(trial_dir))
+
+
+def judge_model(trial_dir):
+    session = json.loads((trial_dir / "session.json").read_text(encoding="utf-8"))
+    return JUDGES[session["model"]]
+
+
 def judge(trial_dir):
+    model = judge_model(trial_dir)
     completed = subprocess.run(
-        [shutil.which("claude"), "-p", "--model", MODEL, "--safe-mode", "--tools", ""],
+        [shutil.which("claude"), "-p", "--model", model, "--safe-mode", "--tools", ""],
         input=prompt(trial_dir),
         capture_output=True,
         text=True,
@@ -85,21 +127,28 @@ def judge(trial_dir):
     if completed.returncode != 0:
         return trial_dir.name, f"ERROR {completed.returncode}: {completed.stderr[-500:]}"
     (trial_dir / "verdict.md").write_text(completed.stdout, encoding="utf-8")
-    return trial_dir.name, "ok"
+    missing = missing_lines(completed.stdout, seam_of(trial_dir))
+    record = {"model": model, "missing_lines": missing}
+    (trial_dir / "judge.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    if missing:
+        return trial_dir.name, f"INCOMPLETE, judged by {model}: no row for {', '.join(missing)}"
+    return trial_dir.name, f"ok, judged by {model}"
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("condition", choices=("without", "with", "with-v2"))
+    parser.add_argument("--model", choices=AGENTS, required=True, help="the coding agent whose trials are judged")
     parser.add_argument("--only", nargs="*", help="trial ids to judge")
     parser.add_argument("--parallel", type=int, default=4)
     parser.add_argument("--redo", action="store_true", help="judge again trials that have a verdict")
+    parser.add_argument("--runs", type=Path, default=TRIALS / "runs", help="where the runs are")
     args = parser.parse_args()
 
-    runs = TRIALS / "runs" / args.condition
+    runs = args.runs.resolve() / args.model / args.condition
     todo = [
         d for d in sorted(runs.iterdir())
-        if (d / "session.json").exists() and (args.redo or not (d / "verdict.md").exists())
+        if (d / "session.json").exists() and (args.redo or not judged(d))
         and (not args.only or d.name in args.only)
     ]
     print(f"{len(todo)} trials to judge", flush=True)
