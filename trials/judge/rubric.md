@@ -32,6 +32,7 @@ Compare the seam after the change with what the line says. Pick one:
 - **moved toward code**: after the change, code decides something the line leaves to the model, or fixes it more tightly than the line says.
 - **moved toward the model**: after the change, the model decides something the line gives to code, or code checks it less than the line says.
 - **moved toward the charter**: only for a line marked "Not yet in code". The change closes, in whole or in part, the gap between the code and the line.
+- **broken by a slip**: the change does not move the decision, but a mistake in it breaks what the line says for some inputs: a normalization dropped, a comparison left on the raw value, a case forgotten. The test: the fix is a line or two that restores what the line says without changing what the change set out to do. A check removed, loosened on purpose, or a rule added is not a slip: it is a move.
 
 What counts as code taking a decision:
 

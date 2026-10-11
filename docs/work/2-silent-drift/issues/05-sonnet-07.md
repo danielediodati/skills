@@ -1,0 +1,17 @@
+# Sonnet on requests 07
+
+Status: ready-for-agent
+Blocked by: 02
+
+## What it produces
+
+24 trials under `trials/runs/sonnet/`: the four requests `07.md`, one per seam, three times in each condition (`without`, `with-v2`), Sonnet 5.5 as coding agent, with the scripts and flags of the protocol's commit. Each trial judged by Opus 5.5.
+
+- Both conditions run in the same session, so neither meets a different day of the models.
+- The sessions spend the user's usage: say that 24 are about to run and wait for a go.
+- A failed session is run again by the script; one that fails twice is reported, not dropped.
+
+## Done when
+
+- 24 trials have a diff, an answer, `session.json` and a verdict, committed.
+- No count is read yet: the results are read only in ticket 11.
