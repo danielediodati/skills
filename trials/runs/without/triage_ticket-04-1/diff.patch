@@ -1,0 +1,84 @@
+--- a/seam.py
++++ b/seam.py
+@@ -5,10 +5,16 @@
+ QUEUES = ("billing", "technical", "account", "shipping", "general")
+ URGENCIES = ("low", "normal", "high", "urgent")
+ RESPOND_WITHIN_HOURS = {"low": 72, "normal": 24, "high": 8, "urgent": 1}
+-MAX_BODY_CHARS = 2000
++MAX_BODY_CHARS = 12000
++TAIL_SHARE = 0.75  # the newest message and the closing ask are at the end
+ MAX_SUMMARY_CHARS = 120
+ 
+ PROMPT = """You triage customer support tickets.
++
++The customer's actual request can be anywhere in the message, often at the
++end. Quoted earlier messages, pasted logs and background story are context:
++route and summarise on what the customer is asking for now, not on how the
++message begins. If part of the text was omitted it is marked "[...]".
+ 
+ Answer with exactly three lines:
+ queue: one of {queues}
+@@ -38,7 +44,7 @@
+         queues=", ".join(QUEUES),
+         urgencies=", ".join(URGENCIES),
+         subject=subject,
+-        body=body[:MAX_BODY_CHARS],
++        body=_fit(_drop_quoted(body), MAX_BODY_CHARS),
+     ))
+     fields = _parse_fields(answer)
+ 
+@@ -58,6 +64,22 @@
+     }
+ 
+ 
++def _drop_quoted(body):
++    """Remove lines an email client quoted (">"), unless nothing else is left."""
++    kept = [line for line in body.splitlines() if not line.lstrip().startswith(">")]
++    text = "\n".join(kept).strip()
++    return text or body
++
++
++def _fit(body, limit):
++    """Shorten an over-long body by cutting the middle, keeping both ends."""
++    if len(body) <= limit:
++        return body
++    tail = int(limit * TAIL_SHARE)
++    head = limit - tail
++    return body[:head] + "\n[...]\n" + body[-tail:]
++
++
+ def _parse_fields(answer):
+     fields = {}
+     for line in answer.splitlines():
+--- a/test.py
++++ b/test.py
+@@ -82,10 +82,26 @@
+         self.assertTrue(result["summary"].startswith("a b ccc"))
+         self.assertEqual(len(result["summary"]), 120)
+ 
+-    def test_only_the_start_of_a_long_body_is_sent(self):
++    def test_request_after_a_long_quoted_thread_reaches_the_model(self):
++        quoted = "\n".join("> old line %d about the delivery address" % i for i in range(300))
++        body = quoted + "\n\nI was charged 1,480 EUR instead of 148 EUR, please reverse it."
++        model = FakeModel("queue: billing\nurgency: high\nsummary: x")
++        triage_ticket({"subject": "Re: address", "body": body}, model)
++        self.assertIn("1,480 EUR", model.prompts[0])
++        self.assertNotIn("old line 5 ", model.prompts[0])
++
++    def test_request_after_a_long_unquoted_log_reaches_the_model(self):
++        body = "error line\n" * 1500 + "Why does the export fail?"
++        model = FakeModel("queue: technical\nurgency: low\nsummary: x")
++        triage_ticket({"subject": "Error", "body": body}, model)
++        self.assertIn("Why does the export fail?", model.prompts[0])
++        self.assertLess(len(model.prompts[0]), 13000)
++
++    def test_a_huge_body_keeps_both_ends(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")
+-        triage_ticket({"subject": "Hi", "body": "x" * 2000 + "TAIL"}, model)
+-        self.assertNotIn("TAIL", model.prompts[0])
++        triage_ticket({"subject": "Hi", "body": "HEAD" + "x" * 50000 + "TAIL"}, model)
++        self.assertIn("HEAD", model.prompts[0])
++        self.assertIn("TAIL", model.prompts[0])
+ 
+     def test_empty_ticket_is_refused_before_asking_the_model(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")

@@ -1,0 +1,15 @@
+--- a/seam.py
++++ b/seam.py
+@@ -8,6 +8,12 @@
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
++
++The shop shows each product's price and rating right next to your reason, and
++the customer will hold the shop to what it says. If the reason mentions a price,
++a rating, or how the product compares with the others, it must agree exactly
++with the figures in the list below. If you are not sure a claim holds, say how
++the product meets the need instead.
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}

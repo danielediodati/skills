@@ -1,0 +1,50 @@
+--- a/seam.py
++++ b/seam.py
+@@ -5,7 +5,7 @@
+ QUEUES = ("billing", "technical", "account", "shipping", "general")
+ URGENCIES = ("low", "normal", "high", "urgent")
+ RESPOND_WITHIN_HOURS = {"low": 72, "normal": 24, "high": 8, "urgent": 1}
+-MAX_BODY_CHARS = 2000
++MAX_BODY_CHARS = 20000
+ MAX_SUMMARY_CHARS = 120
+ 
+ PROMPT = """You triage customer support tickets.
+@@ -14,6 +14,10 @@
+ queue: one of {queues}
+ urgency: one of {urgencies}
+ summary: one sentence saying what the customer needs
++
++The customer's actual request can be anywhere in the message: after a quoted
++earlier exchange, after a pasted log, or in the last paragraph. Read the whole
++message before deciding; the subject may describe an older thread.
+ 
+ Subject: {subject}
+ 
+--- a/test.py
++++ b/test.py
+@@ -1,6 +1,6 @@
+ import unittest
+ 
+-from seam import triage_ticket
++from seam import MAX_BODY_CHARS, triage_ticket
+ 
+ 
+ class FakeModel:
+@@ -82,9 +82,15 @@
+         self.assertTrue(result["summary"].startswith("a b ccc"))
+         self.assertEqual(len(result["summary"]), 120)
+ 
+-    def test_only_the_start_of_a_long_body_is_sent(self):
++    def test_request_at_the_end_of_a_long_body_reaches_the_model(self):
++        model = FakeModel("queue: billing\nurgency: low\nsummary: x")
++        body = "quoted earlier exchange. " * 400 + "Charged 1,480 instead of 148."
++        triage_ticket({"subject": "Re: address", "body": body}, model)
++        self.assertIn("Charged 1,480 instead of 148.", model.prompts[0])
++
++    def test_body_beyond_the_cap_is_cut(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")
+-        triage_ticket({"subject": "Hi", "body": "x" * 2000 + "TAIL"}, model)
++        triage_ticket({"subject": "Hi", "body": "x" * MAX_BODY_CHARS + "TAIL"}, model)
+         self.assertNotIn("TAIL", model.prompts[0])
+ 
+     def test_empty_ticket_is_refused_before_asking_the_model(self):

@@ -1,0 +1,141 @@
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,6 @@
+ 
+ `recommend_products(query, catalog, model, limit=5)` takes what the shopper typed, the catalogue (a list of products, each with `id`, `name`, `price`, `rating` and `in_stock`) and a model, any callable that takes a prompt string and returns a string. The model chooses the products that suit the search, puts them in order and writes a short reason for each.
+ 
+-The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product). Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
++The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product, never cut off mid-sentence: a reason that comes back too long is sent to the model once to be rewritten shorter, and if it is still too long it falls back to its first complete sentence that fits, or to an empty reason). Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -8,9 +8,17 @@
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
++Each reason must be one complete sentence of at most {max_chars} characters.
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}
++"""
++
++REWRITE_PROMPT = """These reasons are shown to a customer of an online shop, but they are too long.
++Rewrite each one as a single complete sentence of at most {max_chars} characters that keeps
++its main point. Answer with one product per line, as: ID | reason
++
++{reasons}
+ """
+ 
+ LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+@@ -32,6 +40,7 @@
+     answer = model(PROMPT.format(
+         query=query,
+         limit=limit,
++        max_chars=MAX_REASON_CHARS,
+         products="\n".join(
+             f"{p['id']} | {p['name']} | {p['price']:.2f} | {p['rating']}"
+             for p in available.values()
+@@ -40,9 +49,7 @@
+ 
+     picks = []
+     seen = set()
+-    for line in answer.splitlines():
+-        product_id, _, reason = LIST_MARKER.sub("", line).partition("|")
+-        product_id = product_id.strip()
++    for product_id, reason in _parse(answer):
+         # The model may invent an ID or repeat one: only real, new ones count.
+         if product_id not in available or product_id in seen:
+             continue
+@@ -53,8 +60,50 @@
+             "name": product["name"],
+             "price": product["price"],
+             "rating": product["rating"],
+-            "reason": " ".join(reason.split())[:MAX_REASON_CHARS],
++            "reason": reason,
+         })
+         if len(picks) == limit:
+             break
++
++    _shorten_reasons(picks, model)
+     return picks
++
++
++def _parse(answer):
++    """Yield (id, reason) for each `ID | reason` line, reason on one line."""
++    for line in answer.splitlines():
++        product_id, _, reason = LIST_MARKER.sub("", line).partition("|")
++        yield product_id.strip(), " ".join(reason.split())
++
++
++def _shorten_reasons(picks, model):
++    """Make every reason fit MAX_REASON_CHARS without cutting it mid-sentence.
++
++    Over-long reasons are sent back to the model once to be rewritten. Any that
++    still do not fit keep their first complete sentence that fits, or become
++    empty, rather than being cut off in the middle.
++    """
++    too_long = [p for p in picks if len(p["reason"]) > MAX_REASON_CHARS]
++    if not too_long:
++        return
++    wanted = {p["id"] for p in too_long}
++    rewritten = {}
++    answer = model(REWRITE_PROMPT.format(
++        max_chars=MAX_REASON_CHARS,
++        reasons="\n".join(f"{p['id']} | {p['reason']}" for p in too_long),
++    ))
++    for product_id, reason in _parse(answer):
++        if product_id in wanted and product_id not in rewritten:
++            rewritten[product_id] = reason
++    for pick in too_long:
++        reason = rewritten.get(pick["id"], "")
++        if reason and len(reason) <= MAX_REASON_CHARS:
++            pick["reason"] = reason
++        else:
++            pick["reason"] = _whole_sentence(pick["reason"])
++
++
++def _whole_sentence(text):
++    """Longest run of complete sentences from the start of `text` that fits, or ''."""
++    match = re.match(r"(.*[.!?])(?:\s|$)", text[:MAX_REASON_CHARS + 1])
++    return match.group(1) if match else ""
+--- a/test.py
++++ b/test.py
+@@ -70,10 +70,33 @@
+         result = recommend(answer, query="cable", limit=2)
+         self.assertEqual([p["id"] for p in result], ["C-010", "C-020"])
+ 
+-    def test_reason_is_one_line_and_capped(self):
+-        result = recommend("H-100 |  Best   sound " + "!" * 200)
+-        self.assertTrue(result[0]["reason"].startswith("Best sound !!!"))
+-        self.assertEqual(len(result[0]["reason"]), 80)
++    def test_reason_is_one_line(self):
++        result = recommend("H-100 |  Best   sound ")
++        self.assertEqual(result[0]["reason"], "Best sound")
++
++    def test_long_reason_is_rewritten_by_the_model_not_cut(self):
++        long = "Blocks out engine noise on long flights and the battery easily lasts a whole workweek."
++        answers = iter([f"H-100 | {long}", "H-100 | Quiet on flights, battery lasts a workweek."])
++        prompts = []
++
++        def model(prompt):
++            prompts.append(prompt)
++            return next(answers)
++
++        result = recommend_products("headphones", CATALOG, model)
++        self.assertEqual(result[0]["reason"], "Quiet on flights, battery lasts a workweek.")
++        self.assertEqual(len(prompts), 2)
++
++    def test_unfixable_reason_keeps_a_whole_sentence_or_is_empty(self):
++        first = "Great for travel. "
++        result = recommend("H-100 | " + first + "and then it goes on " * 10)
++        self.assertEqual(result[0]["reason"], "Great for travel.")
++        result = recommend("H-100 | " + "no full stop here " * 10)
++        self.assertEqual(result[0]["reason"], "")
++
++    def test_every_reason_fits(self):
++        result = recommend("H-100 | " + "word " * 40)
++        self.assertLessEqual(len(result[0]["reason"]), 80)
+ 
+     def test_pick_without_a_reason_has_an_empty_one(self):
+         result = recommend("H-100")

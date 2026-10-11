@@ -1,0 +1,85 @@
+--- a/README.md
++++ b/README.md
+@@ -13,4 +13,6 @@
+ 
+ Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
+ 
++Bodies over 2000 characters are shortened before they reach the model: the first 600 and the last 1400 characters are kept and the middle is dropped, so a request placed after quoted history or a pasted log is still seen. The prompt also tells the model to route on what the customer is asking, not on the quoted or older topic.
++
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -6,6 +6,11 @@
+ URGENCIES = ("low", "normal", "high", "urgent")
+ RESPOND_WITHIN_HOURS = {"low": 72, "normal": 24, "high": 8, "urgent": 1}
+ MAX_BODY_CHARS = 2000
++# Long bodies keep their start and their end. The end is weighted more: it is
++# where the customer's own message sits under quoted history or a pasted log.
++BODY_HEAD_CHARS = 600
++BODY_TAIL_CHARS = MAX_BODY_CHARS - BODY_HEAD_CHARS
++OMISSION_MARK = "\n[... middle of a long message omitted ...]\n"
+ MAX_SUMMARY_CHARS = 120
+ 
+ PROMPT = """You triage customer support tickets.
+@@ -14,6 +19,12 @@
+ queue: one of {queues}
+ urgency: one of {urgencies}
+ summary: one sentence saying what the customer needs
++
++Route on what the customer is asking for, wherever in the message it appears.
++Long messages often start with quoted earlier emails, a pasted log or
++background; the actual request may come after that, or at the very end. Do not
++route on the quoted or older topic if the customer is now asking about
++something else.
+ 
+ Subject: {subject}
+ 
+@@ -38,7 +49,7 @@
+         queues=", ".join(QUEUES),
+         urgencies=", ".join(URGENCIES),
+         subject=subject,
+-        body=body[:MAX_BODY_CHARS],
++        body=_shorten(body),
+     ))
+     fields = _parse_fields(answer)
+ 
+@@ -58,6 +69,12 @@
+     }
+ 
+ 
++def _shorten(body):
++    if len(body) <= MAX_BODY_CHARS:
++        return body
++    return body[:BODY_HEAD_CHARS] + OMISSION_MARK + body[-BODY_TAIL_CHARS:]
++
++
+ def _parse_fields(answer):
+     fields = {}
+     for line in answer.splitlines():
+--- a/test.py
++++ b/test.py
+@@ -82,10 +82,21 @@
+         self.assertTrue(result["summary"].startswith("a b ccc"))
+         self.assertEqual(len(result["summary"]), 120)
+ 
+-    def test_only_the_start_of_a_long_body_is_sent(self):
++    def test_short_body_is_sent_whole(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")
+-        triage_ticket({"subject": "Hi", "body": "x" * 2000 + "TAIL"}, model)
+-        self.assertNotIn("TAIL", model.prompts[0])
++        triage_ticket({"subject": "Hi", "body": "x" * 1990 + "TAIL"}, model)
++        self.assertIn("TAIL", model.prompts[0])
++        self.assertNotIn("omitted", model.prompts[0])
++
++    def test_long_body_keeps_start_and_end(self):
++        body = "HEAD " + "> quoted " * 1000 + "Please refund 1,480 EUR."
++        model = FakeModel("queue: general\nurgency: low\nsummary: x")
++        triage_ticket({"subject": "Re: address", "body": body}, model)
++        prompt = model.prompts[0]
++        self.assertIn("HEAD", prompt)
++        self.assertIn("Please refund 1,480 EUR.", prompt)
++        self.assertIn("omitted", prompt)
++        self.assertLess(len(prompt), 3500)
+ 
+     def test_empty_ticket_is_refused_before_asking_the_model(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")

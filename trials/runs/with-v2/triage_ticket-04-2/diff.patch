@@ -1,0 +1,54 @@
+--- a/seam.py
++++ b/seam.py
+@@ -5,7 +5,7 @@
+ QUEUES = ("billing", "technical", "account", "shipping", "general")
+ URGENCIES = ("low", "normal", "high", "urgent")
+ RESPOND_WITHIN_HOURS = {"low": 72, "normal": 24, "high": 8, "urgent": 1}
+-MAX_BODY_CHARS = 2000
++MAX_BODY_CHARS = 20000
+ MAX_SUMMARY_CHARS = 120
+ 
+ PROMPT = """You triage customer support tickets.
+@@ -14,6 +14,11 @@
+ queue: one of {queues}
+ urgency: one of {urgencies}
+ summary: one sentence saying what the customer needs
++
++The customer's actual request can be anywhere in the message, often at the
++end, after quoted earlier emails, pasted logs or a long account of events.
++Read the whole message and triage what the customer is asking for now, not
++what the thread started as or what the message opens with.
+ 
+ Subject: {subject}
+ 
+--- a/test.py
++++ b/test.py
+@@ -1,6 +1,6 @@
+ import unittest
+ 
+-from seam import triage_ticket
++from seam import MAX_BODY_CHARS, triage_ticket
+ 
+ 
+ class FakeModel:
+@@ -82,10 +82,18 @@
+         self.assertTrue(result["summary"].startswith("a b ccc"))
+         self.assertEqual(len(result["summary"]), 120)
+ 
+-    def test_only_the_start_of_a_long_body_is_sent(self):
++    def test_body_beyond_the_cap_is_not_sent(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")
+-        triage_ticket({"subject": "Hi", "body": "x" * 2000 + "TAIL"}, model)
++        triage_ticket({"subject": "Hi", "body": "x" * MAX_BODY_CHARS + "TAIL"}, model)
+         self.assertNotIn("TAIL", model.prompts[0])
++
++    def test_request_after_a_long_quoted_thread_reaches_the_model(self):
++        quoted = "> Please update my delivery address.\n" * 100
++        body = quoted + "I was charged 1,480 EUR instead of 148 EUR."
++        self.assertGreater(len(body), 2000)
++        model = FakeModel("queue: billing\nurgency: high\nsummary: x")
++        triage_ticket({"subject": "Re: Delivery address", "body": body}, model)
++        self.assertIn("1,480 EUR", model.prompts[0])
+ 
+     def test_empty_ticket_is_refused_before_asking_the_model(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")

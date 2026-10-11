@@ -1,0 +1,33 @@
+--- a/seam.py
++++ b/seam.py
+@@ -11,6 +11,11 @@
+ "supplier" (string), "invoice_number" (string), "issue_date" (YYYY-MM-DD),
+ "currency" (three-letter code), "lines" (a list of objects with "description",
+ "quantity" and "unit_price") and "total" (the amount due).
++Suppliers write numbers in their own country's style ("1.250,00" and "1,250.00"
++are both one thousand two hundred and fifty). Read each figure the way the
++supplier meant it, and write every quantity, unit_price and total as a plain
++decimal number: digits with an optional "." decimal point, no thousands
++separator and no currency symbol (1250.00).
+ Answer with the JSON object only.
+ 
+ Invoice:
+--- a/test.py
++++ b/test.py
+@@ -71,6 +71,16 @@
+         self.assertEqual(len(model.prompts), 1)
+         self.assertIn(INVOICE_TEXT, model.prompts[0])
+ 
++    def test_prompt_asks_for_plain_decimal_numbers(self):
++        model = FakeModel(json.dumps(ANSWER))
++        extract_invoice(INVOICE_TEXT, model)
++        self.assertIn("1.250,00", model.prompts[0])
++        self.assertIn("plain", model.prompts[0])
++
++    def test_continental_notation_is_not_guessed_by_code(self):
++        with self.assertRaisesRegex(InvoiceError, "total is not a number"):
++            extract(total="1.250,00")
++
+     def test_json_inside_a_code_fence_is_read(self):
+         answer = "Here is the invoice:\n```json\n" + json.dumps(ANSWER) + "\n```"
+         result = extract_invoice(INVOICE_TEXT, FakeModel(answer))

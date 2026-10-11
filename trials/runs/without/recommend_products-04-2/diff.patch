@@ -1,0 +1,129 @@
+--- a/README.md
++++ b/README.md
+@@ -6,4 +6,6 @@
+ 
+ The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product). Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
+ 
++The reason never states or compares price or rating: the model is told not to, and any reason containing a digit, a currency symbol, or wording about price, rating or standing ("under", "cheapest", "top-rated", "than", ...) is replaced by an empty reason. The strip already prints the real figures beside each product.
++
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -8,12 +8,35 @@
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
++Do not mention prices, ratings, or how products compare on price or rating: the shop
++shows those figures itself.
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}
+ """
+ 
+ LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
++
++# The shop shows price and rating next to the reason, so a reason must not state
++# or compare them in its own words: the model can get them wrong, and a printed
++# price that differs from the one charged misleads shoppers. The reason is free
++# text we cannot verify, so any wording that touches these is rejected and the
++# pick is shown with no reason (the figures are printed beside it anyway).
++FIGURES_OR_CURRENCY = re.compile(r"[\d£$€¥]")
++PRICE_RATING_STANDING = re.compile(
++    r"\b(?:"
++    r"cheap\w*|afford\w*|budget|bargain|pric\w*|cost\w*|pay|save|saving\w*|"
++    r"discount\w*|deal|value|worth|under|below|above|less|than|"
++    r"pounds?|dollars?|euros?|cash|free|fiver|tenner|quid|bucks|grand|"
++    r"rated|ratings?|stars?|reviews?|reviewed|scores?|highest|lowest|number one|"
++    r"ten|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand"
++    r")\b",
++    re.IGNORECASE,
++)
++
++
++def _states_price_or_rating(reason):
++    return bool(FIGURES_OR_CURRENCY.search(reason) or PRICE_RATING_STANDING.search(reason))
+ 
+ 
+ def recommend_products(query, catalog, model, limit=5):
+@@ -48,12 +71,15 @@
+             continue
+         seen.add(product_id)
+         product = available[product_id]
++        reason = " ".join(reason.split())
++        if _states_price_or_rating(reason):
++            reason = ""
+         picks.append({
+             "id": product_id,
+             "name": product["name"],
+             "price": product["price"],
+             "rating": product["rating"],
+-            "reason": " ".join(reason.split())[:MAX_REASON_CHARS],
++            "reason": reason[:MAX_REASON_CHARS],
+         })
+         if len(picks) == limit:
+             break
+--- a/test.py
++++ b/test.py
+@@ -27,10 +27,10 @@
+ 
+ class RecommendProductsTest(unittest.TestCase):
+     def test_picks_come_back_in_the_model_order_with_catalog_data(self):
+-        result = recommend("H-200 | Light and cheap\nH-100 | Best sound")
++        result = recommend("H-200 | Light and portable\nH-100 | Best sound")
+         self.assertEqual(result, [
+             {"id": "H-200", "name": "Pico wired earbuds", "price": 19.9,
+-             "rating": 4.1, "reason": "Light and cheap"},
++             "rating": 4.1, "reason": "Light and portable"},
+             {"id": "H-100", "name": "Aria wireless headphones", "price": 129.0,
+              "rating": 4.7, "reason": "Best sound"},
+         ])
+@@ -52,21 +52,21 @@
+         self.assertEqual([p["id"] for p in result], ["H-100"])
+ 
+     def test_invented_id_is_dropped(self):
+-        result = recommend("H-999 | Great value\nH-200 | Light and cheap")
++        result = recommend("H-999 | Great value\nH-200 | Light and portable")
+         self.assertEqual([p["id"] for p in result], ["H-200"])
+ 
+     def test_repeated_id_counts_once(self):
+-        result = recommend("H-100 | Best sound\nH-100 | Really, the best\nH-200 | Cheap")
++        result = recommend("H-100 | Best sound\nH-100 | Really, the best\nH-200 | Portable")
+         self.assertEqual([p["id"] for p in result], ["H-100", "H-200"])
+         self.assertEqual(result[0]["reason"], "Best sound")
+ 
+     def test_list_markers_and_chatter_are_ignored(self):
+-        answer = "Here are my picks:\n1. H-100 | Best sound\n- H-200 | Cheap\n\nEnjoy!"
++        answer = "Here are my picks:\n1. H-100 | Best sound\n- H-200 | Portable\n\nEnjoy!"
+         result = recommend(answer)
+         self.assertEqual([p["id"] for p in result], ["H-100", "H-200"])
+ 
+     def test_no_more_than_the_limit(self):
+-        answer = "C-010 | Short\nC-020 | Long\nH-100 | Also nice\nH-200 | Cheap"
++        answer = "C-010 | Short\nC-020 | Long\nH-100 | Also nice\nH-200 | Portable"
+         result = recommend(answer, query="cable", limit=2)
+         self.assertEqual([p["id"] for p in result], ["C-010", "C-020"])
+ 
+@@ -74,6 +74,23 @@
+         result = recommend("H-100 |  Best   sound " + "!" * 200)
+         self.assertTrue(result[0]["reason"].startswith("Best sound !!!"))
+         self.assertEqual(len(result[0]["reason"]), 80)
++
++    def test_reason_stating_a_price_is_dropped(self):
++        for reason in ("Great sound for under 100", "Only £99", "Under a hundred pounds",
++                       "Best price around", "Cheapest option", "A bargain"):
++            result = recommend("H-100 | " + reason)
++            self.assertEqual(result[0]["reason"], "", reason)
++            self.assertEqual(result[0]["price"], 129.0)
++
++    def test_reason_stating_a_rating_or_standing_is_dropped(self):
++        for reason in ("Our top-rated cable", "Highest rated of the lot", "4.9 stars",
++                       "Better than the 2 m cable", "Number one choice"):
++            result = recommend("C-010 | " + reason, query="cable")
++            self.assertEqual(result[0]["reason"], "", reason)
++
++    def test_other_reasons_survive(self):
++        result = recommend("H-100 | Comfortable over-ear fit with deep bass")
++        self.assertEqual(result[0]["reason"], "Comfortable over-ear fit with deep bass")
+ 
+     def test_pick_without_a_reason_has_an_empty_one(self):
+         result = recommend("H-100")

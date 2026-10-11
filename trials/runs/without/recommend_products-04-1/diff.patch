@@ -1,0 +1,169 @@
+--- a/README.md
++++ b/README.md
+@@ -6,4 +6,6 @@
+ 
+ The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product). Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
+ 
++The reason is checked against the figures shown for the product: a number that is not its price, its rating or part of its name, a price or rating bound ("under 100") it does not meet, or a standing claim ("top-rated", "cheapest") that another returned product beats makes the reason empty rather than shown wrong. The model is also told not to quote figures.
++
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -8,12 +8,111 @@
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
++Do not quote prices or ratings in the reason, and do not compare the product with
++others on price or rating: those are shown next to the product by the shop.
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}
+ """
+ 
+ LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
++
++# A reason may only say things about price, rating or standing that the figures
++# shown for the product (and for the other products in the strip) bear out.
++NUMBER = re.compile(r"\d+(?:[.,]\d+)*(?:\s*[A-Za-z%]+)?")
++COMPARATOR = re.compile(
++    r"\b(under|below|beneath|less than|within|up to|at most|max(?:imum)?|"
++    r"over|above|more than|at least|exceeds?)\s*(?:[$€£]|usd|eur)?\s*$",
++    re.I,
++)
++RATING_CONTEXT = re.compile(r"star|rat|/\s*5|out of", re.I)
++NUMBER_WORDS = re.compile(
++    r"\b(?:zero|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
++    r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|"
++    r"dozen|half|double|twice)\b",
++    re.I,
++)
++TOP_RATED = re.compile(
++    r"\b(?:(?:top|best|highest)[- ]rated|(?:best|highest|top) rating|rated (?:best|highest))\b",
++    re.I,
++)
++CHEAPEST = re.compile(
++    r"\b(?:cheapest|lowest[- ]pric(?:e|ed)|best price|most affordable|lowest cost)\b",
++    re.I,
++)
++PRICIEST = re.compile(
++    r"\b(?:most expensive|priciest|highest[- ]priced|highest price)\b", re.I
++)
++# Claims about price or rating that can't be checked against the figures shown.
++UNVERIFIABLE = re.compile(
++    r"\b(?:discount(?:ed)?|on sale|sale|deals?|sav(?:e|ing|ings)|"
++    r"reduced|bargain|price drop|best value|best[- ]sell(?:er|ing)|"
++    r"cheaper|pricier|more expensive|less expensive|more affordable|"
++    r"(?:higher|better|lower|lowest|worst)[- ]rated|(?:higher|lower) (?:rating|price)|"
++    r"free)\b|\d+\s*%",
++    re.I,
++)
++
++
++def _to_number(text):
++    try:
++        return float(text.replace(",", ""))
++    except ValueError:
++        return None
++
++
++def _numbers_agree(reason, product):
++    squashed_name = re.sub(r"\s+", "", product["name"].lower())
++    for match in NUMBER.finditer(reason):
++        digits = re.match(r"\d+(?:[.,]\d+)*", match.group()).group()
++        value = _to_number(digits)
++        if value is None:
++            return False
++        comparator = COMPARATOR.search(reason[:match.start()])
++        if comparator:
++            window = reason[max(0, match.start() - 20):match.start() + len(match.group()) + 12]
++            actual = product["rating"] if RATING_CONTEXT.search(window) else product["price"]
++            word = comparator.group(1).lower()
++            if word in ("under", "below", "beneath", "less than"):
++                ok = actual < value
++            elif word in ("over", "above", "more than"):
++                ok = actual > value
++            elif word == "at least":
++                ok = actual >= value
++            else:
++                ok = actual <= value
++            if not ok:
++                return False
++            continue
++        if value in (float(product["price"]), float(product["rating"])):
++            continue
++        # A number that is part of the product's own name, e.g. "2 m".
++        if re.sub(r"\s+", "", match.group().lower()) in squashed_name:
++            continue
++        return False
++    return True
++
++
++def _reason_is_supported(reason, product, strip):
++    """Whether `reason` says nothing about `product` that its figures contradict.
++
++    `strip` is every product being shown, so standing claims ("top-rated",
++    "cheapest") are checked against what the shopper can see next to it.
++    """
++    if not reason:
++        return True
++    name_words = set(re.findall(r"[a-z]+", product["name"].lower()))
++    if any(w.group().lower() not in name_words for w in NUMBER_WORDS.finditer(reason)):
++        return False
++    if UNVERIFIABLE.search(reason) or not _numbers_agree(reason, product):
++        return False
++    if TOP_RATED.search(reason) and product["rating"] < max(p["rating"] for p in strip):
++        return False
++    if CHEAPEST.search(reason) and product["price"] > min(p["price"] for p in strip):
++        return False
++    if PRICIEST.search(reason) and product["price"] < max(p["price"] for p in strip):
++        return False
++    return True
+ 
+ 
+ def recommend_products(query, catalog, model, limit=5):
+@@ -57,4 +156,11 @@
+         })
+         if len(picks) == limit:
+             break
++
++    # The model's wording is only shown when it agrees with the figures; a
++    # reason that doesn't is dropped rather than shown wrong.
++    strip = [available[p["id"]] for p in picks]
++    for pick, product in zip(picks, strip):
++        if not _reason_is_supported(pick["reason"], product, strip):
++            pick["reason"] = ""
+     return picks
+--- a/test.py
++++ b/test.py
+@@ -89,6 +89,31 @@
+         self.assertEqual(recommend_products("headphones", [CATALOG[2]], model), [])
+         self.assertEqual(model.prompts, [])
+ 
++    def test_reason_promising_a_price_the_product_does_not_have_is_dropped(self):
++        result = recommend("H-100 | Great sound for under 100\nH-200 | Great sound for under 25")
++        self.assertEqual(result[0]["reason"], "")
++        self.assertEqual(result[1]["reason"], "Great sound for under 25")
++
++    def test_reason_with_the_real_price_or_rating_is_kept(self):
++        result = recommend("H-100 | Rated 4.7, only $129.00")
++        self.assertEqual(result[0]["reason"], "Rated 4.7, only $129.00")
++
++    def test_reason_with_wrong_figure_or_number_word_is_dropped(self):
++        for reason in ("Only 99", "Rated 5 stars", "Under a hundred", "20% off", "Over 4.9 stars"):
++            self.assertEqual(recommend("H-100 | " + reason)[0]["reason"], "", reason)
++
++    def test_top_rated_claim_must_hold_in_the_strip(self):
++        result = recommend("C-010 | Our top-rated cable\nC-020 | Our top-rated cable", query="cable")
++        self.assertEqual([p["reason"] for p in result], ["", "Our top-rated cable"])
++
++    def test_cheapest_claim_must_hold_in_the_strip(self):
++        result = recommend("C-020 | The cheapest cable\nC-010 | The cheapest cable", query="cable")
++        self.assertEqual([p["reason"] for p in result], ["", "The cheapest cable"])
++
++    def test_number_in_product_name_is_fine(self):
++        result = recommend("C-010 | A handy 1 m length", query="cable")
++        self.assertEqual(result[0]["reason"], "A handy 1 m length")
++
+     def test_limit_below_one_is_refused(self):
+         with self.assertRaises(ValueError):
+             recommend("H-100 | Best sound", limit=0)
