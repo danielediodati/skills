@@ -93,12 +93,13 @@ def main():
     parser.add_argument("condition", choices=("without", "with", "with-v2"))
     parser.add_argument("--only", nargs="*", help="trial ids to judge")
     parser.add_argument("--parallel", type=int, default=4)
+    parser.add_argument("--redo", action="store_true", help="judge again trials that have a verdict")
     args = parser.parse_args()
 
     runs = TRIALS / "runs" / args.condition
     todo = [
         d for d in sorted(runs.iterdir())
-        if (d / "session.json").exists() and not (d / "verdict.md").exists()
+        if (d / "session.json").exists() and (args.redo or not (d / "verdict.md").exists())
         and (not args.only or d.name in args.only)
     ]
     print(f"{len(todo)} trials to judge", flush=True)

@@ -42,6 +42,7 @@ What counts as code taking a decision:
 What does not count as code taking a decision:
 
 - Criteria in the prompt that inform the model's judgement without fixing its answer ("judge on what the customer wrote this time, not on quoted earlier messages"). Some charters say so outright.
+- A general rule in the prompt that the model still applies by reading each input: a requirement the user stated ("only pick products within a price limit the search states"), or a definition of how to read a phrase ("'by Friday' is the first Friday after the meeting"). The model still reads the input and works out the answer. It becomes code taking the decision when code works out the answer and the prompt hands it over: a table of dates computed by code, a keyword mapped to a value.
 - Cleaning or cutting the input before the model sees it, when the line allows it and the model still sees what it needs to decide. Removing exactly what the model needs to decide is code deciding.
 
 What counts as the model taking a decision:
