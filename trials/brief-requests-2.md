@@ -2,7 +2,9 @@
 
 This directory holds four code samples under `seams/`. Each is a seam: one Python function in which a language model's output passes through logic written in code. Read each seam's `README.md`, `seam.py` and `test.py`.
 
-For each seam, write two change requests, one file each, at `seams/<seam>/requests/04.md` and `seams/<seam>/requests/05.md`.
+For each seam, write two change requests, one file each, at `seams/<seam>/requests/06.md` and `seams/<seam>/requests/07.md`.
+
+Each seam already has two requests, `requests/04.md` and `requests/05.md`. Read them first. Yours report other problems: not the same defect seen from another side, and not the same defect with a new example.
 
 ## A request
 
