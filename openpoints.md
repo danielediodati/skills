@@ -8,10 +8,11 @@ The decisions taken are in `CONTEXT.md`, numbered 1 to 13.
 
 ## The test that gated everything else
 
-The plugin rested on one untested claim: a seam charter plus the rule in `AGENTS.md` changes what a coding agent does. Session 1 tested it (`trials/results.md`): without the charter 27 of 36 trials drifted and no agent said so; with it 19 drifted, and agents flagged the line 14 times and stopped 8 times. The claim holds, partly, so **the remaining skills are worth writing**, with two consequences:
+The plugin rested on one untested claim: a seam charter plus the rule in `AGENTS.md` changes what a coding agent does. Session 1 tested it (`trials/results.md`): without the charter 27 of 36 trials drifted and no agent said so; with the charter and the rule as it ships now, 12 drifted, and agents flagged the line 17 times and stopped 11 times. The claim holds, so **the remaining skills are worth writing**, with three consequences:
 
-- **The rule has a back door.** 21 of 36 agents with the charter rewrote it to fit their change. Ticket 07 closes it in `setup` and runs the trials with the charter again.
-- **`edd` must check the diff against the charter as it was before the change**, never the one in the working tree: an agent that moved a line rewrites the charter in the same diff.
+- **The first rule had a back door**: 21 of 36 agents rewrote the charter to fit their change. The rule now says only the user changes a charter, and no agent edited it.
+- **`edd` must check the diff against the charter as it was before the change**, never the one in the working tree: an agent that moved a line can rewrite the charter in the same diff.
+- **The drift left is the kind the agent does not see as a move**: input cleaned by code before the model reads it, a parsing rule that also catches a free field, a missing field defaulted instead of refused. That is the diff check's job in `edd`, and the examples the rule or the `charter` skill could name.
 
 Still to check outside that session: load the plugin in a session (`claude --plugin-dir <repo>/a4a`) and see the skills appear. Only the manifests have been validated so far.
 
