@@ -220,12 +220,25 @@ class Spending(unittest.TestCase):
         self.assertIn("spent $0.24 of $1.00", second.stdout)
         self.assertIn("| $0.24 |", (self.evals.root / "log.md").read_text(encoding="utf-8"))
 
-    def test_the_extended_set_does_not_start_when_it_would_pass_the_budget(self):
+    def test_a_run_whose_core_fits_but_whose_extended_set_would_pass_the_budget_does_not_start(self):
         self.agree("0.05")
         done = self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.01)
         self.assertNotEqual(done.returncode, 0)
-        self.assertIn("spent $0.02 of $0.05", done.stdout + done.stderr)
-        self.assertEqual(sorted(self.evals.calls()), ["core-1", "core-2"])
+        self.assertIn("spent $0.00 of $0.05", done.stderr)
+        self.assertEqual(self.evals.calls(), [])
+
+    def test_a_budget_raised_for_the_same_ticket_keeps_the_running_total(self):
+        self.agree("1.00")
+        self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.01)
+        self.agree("2.00")
+        done = self.evals.run("fake", "--check", "--k", "1", cost=0.01)
+        self.assertIn("spent $0.12 of $2.00", done.stdout)
+
+    def test_a_budget_for_another_ticket_starts_the_total_at_zero(self):
+        self.agree("1.00")
+        self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.01)
+        done = self.evals.run("--agree-budget", "1.00", "--note", "ticket 07", eval_set=None)
+        self.assertIn("spent $0.00 of $1.00", done.stdout)
 
     def test_the_check_spends_nothing_and_shows_the_estimate_against_the_budget(self):
         self.agree("1.00")

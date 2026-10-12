@@ -1,6 +1,6 @@
 ---
 name: edd
-description: Eval-driven development for a stochastic seam, a point where a model decides (an agent, a router, a prompt, a tool choice, a retrieval, a model judge). Use when such a seam changes: its prompt, its model, its tools, the code around it, or its charter. Measures one change on the seam's eval set and decides it against the charter, the target and the best result. Deterministic code is tested with unit tests instead; a seam with no charter gets one from `charter` first.
+description: Eval-driven development for a stochastic seam, a point where a model decides (an agent, a router, a prompt, a tool choice, a retrieval, a model judge). Use when such a seam changes: its prompt, its model, its tools, the code around it, or its charter. Measures one change on the seam's eval set and decides it against the charter, the target and the best result. Deterministic code is tested with unit tests instead; writing a seam's charter is a different skill.
 ---
 
 # Eval-driven development
@@ -11,8 +11,8 @@ A deterministic seam (same input, same output) is tested with unit tests written
 
 ## Before the first change
 
-- **Read the charter** at `evals/<seam>/charter.md`: what the model is free to decide, what code constrains, the target. A seam with no charter gets one first, with the user (the `charter` skill). Only the user changes a charter.
-- **Find the eval set**: `evals/<seam>/cases.jsonl` and `grader.py`, in the formats of [FORMAT.md](FORMAT.md) and [GRADERS.md](GRADERS.md). A seam with no eval set gets one before it changes. Writing cases and graders is the job of the `eval` skill; until it exists, write them from the charter's eval direction following those two files.
+- **Read the charter** at `evals/<seam>/charter.md`: what the model is free to decide, what code constrains, the target. A seam with no charter gets one first, with the user (see Other skills). Only the user changes a charter.
+- **Find the eval set**: `evals/<seam>/cases.jsonl` and `grader.py`, read as [FORMAT.md](FORMAT.md) and [GRADERS.md](GRADERS.md) describe them. A seam with no eval set gets one before it changes; writing it is not this skill's job (see Other skills).
 
 ## Nothing paid without approval
 
@@ -21,7 +21,7 @@ Eval runs, model screenings and judge calibrations call paid models. Development
 - **Agree the spending budget first.** Before the first paid call of a ticket, ask the user for one budget, in dollars, for the whole ticket. Record the amount they stated: `python evals/run_evals.py --agree-budget <dollars> --note "<ticket>"`.
 - **Free checks before any paid call**: the unit tests of the code around the seam, a dry run of the adapter where it can run without a model call, and `EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --check`, which checks the eval set, imports the adapter and the grader, and prints the estimate and the running total without a call. A paid run that a free check would have stopped is money spent for nothing.
 - **Every request for approval shows the running total**, e.g. "core and extended sets at k=3, about $0.40; spent $0.84 of $2.00". Never ask for one run alone, without the total.
-- The runner refuses to start a run that would take the total past the budget, before the core set and again before the extended set, and logs each run's cost and the total. Raising the budget is the user's decision, asked in one request with the total.
+- The runner refuses to start a run whose estimate, core and extended sets together, would take the total past the budget; it checks again before the extended set, and logs each run's cost and the total. Raising the budget is the user's decision, asked in one request with the total; recorded with the same `--note`, it keeps what is already spent.
 - **Screen models cheapest first.** When several models are tried, the cheapest that could clear the target runs first; a dearer one runs only when the cheaper ones fall short.
 
 **When the budget is spent** and the runs are still below the target with the charter intact, stop. Put the ways out to the user and take none yourself:
@@ -92,6 +92,12 @@ Derive each seam's categories from its first failures and keep them few (3 to 7)
 - **Tautological grader**: a reference produced by the system itself, or a judge sharing the system's model and prompt.
 - **Programmatic drift**: a free decision taken over by code to make the score rise or a check pass. A score measures whether the output is good, not who took the decision.
 - **Averaging away**: reading only the total when a tag regresses. The runner reports per-tag scores; read them.
+
+## Other skills
+
+- `charter` writes a seam's charter with the user, and amends it when the user moves a line.
+- `eval` will write a seam's eval set: cases, graders, judge calibration, the core and extended sets. Until it exists, [FORMAT.md](FORMAT.md) and [GRADERS.md](GRADERS.md) are where the eval set's rules stand.
+- `setup` writes the rule a project's `AGENTS.md` carries for stochastic seams and spending.
 
 ## Where things live
 

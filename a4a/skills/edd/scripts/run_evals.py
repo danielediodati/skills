@@ -22,8 +22,9 @@ kept per model with the code version they were measured on; a change to the grad
 set discards them, a change to the code keeps them, marked as measured on an earlier version.
 
 Nothing paid runs without approval (decision 14). The user agrees a spending budget for the
-ticket first (--agree-budget). Before the core set and again before the extended set, a run whose
-estimated cost would take the total past the budget refuses to start and prints both. Every run
+ticket first (--agree-budget). A run whose estimated cost, core and extended sets together, would
+take the total past the budget refuses to start and prints both; the check runs again before the
+extended set, on what the core set really cost. Every run
 reports and logs its cost and the running total. --check runs the free checks and shows the
 estimate, without a call.
 
@@ -203,8 +204,8 @@ def cost_per_call(system, runs_dir: Path, model: str) -> float | None:
     """What one call costs: measured on this model's latest run, else the adapter's COST_PER_CASE."""
     for path in sorted(runs_dir.glob("*.json"), reverse=True):  # run ids start with a timestamp
         run = json.loads(path.read_text(encoding="utf-8"))
-        if run.get("model") == model and run.get("calls"):
-            return run["cost"] / run["calls"]
+        if run.get("model") == model and run.get("results"):
+            return sum(r["cost"] for r in run["results"]) / (run["k"] * len(run["results"]))
     return getattr(system, "COST_PER_CASE", None)
 
 
@@ -214,9 +215,12 @@ def read_spending(root: Path) -> dict | None:
 
 
 def agree_budget(root: Path, budget: float, note: str) -> int:
-    """Record the spending budget the user agreed for a ticket; the running total starts at zero."""
-    spending = {"budget": budget, "note": note, "agreed": datetime.now().isoformat(timespec="seconds"),
-                "spent": 0.0, "runs": []}
+    """Record the spending budget the user agreed for a ticket. A new budget for the same ticket keeps
+    what is already spent against it; a budget for another ticket starts the total at zero."""
+    spending = read_spending(root)
+    if spending is None or spending.get("note") != note:
+        spending = {"note": note, "spent": 0.0, "runs": []}
+    spending.update(budget=budget, agreed=datetime.now().isoformat(timespec="seconds"))
     (root / SPENDING).write_text(json.dumps(spending, indent=1), encoding="utf-8")
     print(f"spending budget ${budget:.2f} agreed; {fmt_total(spending)}")
     return 0
@@ -274,7 +278,7 @@ def load_best(seam_dir: Path, settings: dict) -> tuple[dict, str | None]:
         return fresh, None
     best = json.loads(path.read_text(encoding="utf-8"))
     changed = [what for what, key in (("the grader", "grader_hash"), ("the eval set", "cases_hash"))
-               if best[key] != settings[key]]
+               if best.get(key) != settings[key]]
     if changed:
         return fresh, (f"{' and '.join(changed)} changed: best results discarded, "
                        f"the measure changed so earlier scores do not compare")
@@ -310,6 +314,38 @@ def fmt_cost(results: list[dict]) -> str:
     if secs:
         parts.append(f"{sum(secs) / len(secs):.1f} s")
     return ", ".join(parts) or "-"
+
+
+def spread(per_run: list[float]) -> str:
+    return f"{min(per_run):.2f} to {max(per_run):.2f}"
+
+
+def save_run(root: Path, runs_dir: Path, settings: dict, which: str, results: list[dict],
+             score: float, per_run: list[float], notes: str, paired: str = "-",
+             cost: float | None = None, spent: float | None = None) -> str:
+    """Persist one run and its log row before anything is printed: a broken console never loses a run.
+    The cost is what this run paid for: the extended run reuses the core results, so it pays only
+    for the rest of the set."""
+    now = datetime.now()
+    run_id = (now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}-{which}-"
+              + settings["commit"].replace("+", "-"))
+    cost = sum(r["cost"] for r in results) if cost is None else cost
+    run = {"run_id": run_id, **settings, "set": which, "note": notes,
+           "per_run": per_run, "score": score, "cost": cost, "results": results}
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    (runs_dir / f"{run_id}.json").write_text(json.dumps(run, indent=1), encoding="utf-8")
+    append_log(root, [now.strftime("%Y-%m-%d"), settings["commit"], settings["seam"], settings["eval_set"],
+                      settings["model"], settings["provider"], settings["split"], which, settings["k"],
+                      f"{score:.2f}", spread(per_run), paired, fmt_cost(results), f"${cost:.2f}",
+                      "-" if spent is None else f"${spent:.2f}", notes or "-"])
+    return run_id
+
+
+def emit(report: list[str]) -> None:
+    try:
+        print("\n".join(report))
+    except (BrokenPipeError, UnicodeEncodeError):
+        pass  # the run and the log row are already on disk
 
 
 def main() -> int:
@@ -370,7 +406,8 @@ def main() -> int:
               f"in all (${per_call:.4f} per call)")
         print(fmt_total(spending))
         return 0
-    why_not = refusal(spending, core_estimate, f"the core set ({len(core)} cases, k={k})")
+    why_not = refusal(spending, core_estimate + rest_estimate,
+                      f"the core and extended sets ({len(core) + len(rest)} cases, k={k})")
     if why_not:
         sys.exit(why_not)
 
@@ -392,7 +429,8 @@ def main() -> int:
         emit(report)
         return 1
 
-    # The extended set: the whole split, reusing the core results already paid for.
+    # The extended set: the whole split, reusing the core results already paid for. Checked again,
+    # because the core set may have cost more than its estimate.
     why_not = refusal(spending, rest_estimate, f"the extended set ({len(rest)} more cases, k={k})")
     if why_not:
         emit(report)
@@ -455,40 +493,6 @@ def main() -> int:
     report.append(f"run saved: {runs_dir / (run_id + '.json')}")
     emit(report)
     return 0 if score >= args.target else 1
-
-
-def spread(per_run: list[float]) -> str:
-    return f"{min(per_run):.2f} to {max(per_run):.2f}"
-
-
-def save_run(root: Path, runs_dir: Path, settings: dict, which: str, results: list[dict],
-             score: float, per_run: list[float], notes: str, paired: str = "-",
-             cost: float | None = None, spent: float | None = None) -> str:
-    """Persist one run and its log row before anything is printed: a broken console never loses a run.
-    The cost is what this run paid for: the extended run reuses the core results, so it pays only
-    for the rest of the set."""
-    now = datetime.now()
-    run_id = (now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}-{which}-"
-              + settings["commit"].replace("+", "-"))
-    cost = sum(r["cost"] for r in results) if cost is None else cost
-    calls = settings["k"] * len(results)
-    run = {"run_id": run_id, **settings, "set": which, "note": notes,
-           "per_run": per_run, "score": score, "cost": sum(r["cost"] for r in results), "calls": calls,
-           "results": results}
-    runs_dir.mkdir(parents=True, exist_ok=True)
-    (runs_dir / f"{run_id}.json").write_text(json.dumps(run, indent=1), encoding="utf-8")
-    append_log(root, [now.strftime("%Y-%m-%d"), settings["commit"], settings["seam"], settings["eval_set"],
-                      settings["model"], settings["provider"], settings["split"], which, settings["k"],
-                      f"{score:.2f}", spread(per_run), paired, fmt_cost(results), f"${cost:.2f}",
-                      "-" if spent is None else f"${spent:.2f}", notes or "-"])
-    return run_id
-
-
-def emit(report: list[str]) -> None:
-    try:
-        print("\n".join(report))
-    except (BrokenPipeError, UnicodeEncodeError):
-        pass  # the run and the log row are already on disk
 
 
 if __name__ == "__main__":

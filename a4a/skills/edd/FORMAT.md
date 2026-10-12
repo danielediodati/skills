@@ -2,7 +2,7 @@
 
 ## `evals/<seam>/cases.jsonl`
 
-The eval set: one JSON object per line. A run names it in the environment, `EVAL_SET=cases.jsonl`, never by a path in the code; the runner refuses to start without it and logs it on every row. A seam may keep more than one eval set (a set being drafted, a redefined one); each is a file in the seam's directory.
+The eval set: one JSON object per line. A run names it in the environment, `EVAL_SET=cases.jsonl`, never by a path in the code; the runner refuses to start without it and logs it on every row.
 
 ```json
 {"id": "planner-017", "split": "dev", "core": true, "input": {"request": "45 minutes, no barbell, sore left knee"}, "expected": null, "rubric": ["Every exercise avoids loaded knee flexion", "Total duration is between 40 and 50 minutes"], "source": "trace 2026-09-30, user complaint", "tags": ["injury-constraint", "equipment"]}
@@ -65,7 +65,7 @@ Written by the runner, never edited: for each split, the best result of each mod
 
 ## `evals/spending.json`
 
-Written by the runner: the spending budget the user agreed for the current ticket (`--agree-budget <dollars> --note "<ticket>"`), what has been spent against it, and the cost of each run. Recording a new budget starts the total at zero. The runner refuses to start a run whose estimate would take the total past the budget; a run whose estimate is zero (a free local model) needs no budget. The estimate prices a call at the mean cost per call of this model's latest run, else at `COST_PER_CASE`.
+Written by the runner: the spending budget the user agreed for the current ticket (`--agree-budget <dollars> --note "<ticket>"`), what has been spent against it, and the cost of each run. A new budget with the same `--note` raises the budget and keeps the total; a budget for another ticket starts the total at zero. The runner refuses to start a run whose estimate, core and extended sets together, would take the total past the budget, and checks again before the extended set; a run whose estimate is zero (a free local model) needs no budget. The estimate prices a call at the mean cost per call of this model's latest run, else at `COST_PER_CASE`.
 
 ## `evals/log.md`
 
