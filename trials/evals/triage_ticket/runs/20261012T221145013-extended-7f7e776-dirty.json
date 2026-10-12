@@ -1,0 +1,299 @@
+{
+ "run_id": "20261012T221145013-extended-7f7e776-dirty",
+ "seam": "triage_ticket",
+ "eval_set": "cases.jsonl",
+ "split": "dev",
+ "k": 3,
+ "model": "claude-haiku-5-5",
+ "provider": "claude-code",
+ "commit": "7f7e776+dirty",
+ "cases_hash": "e72702c53391",
+ "grader_hash": "b550979165d3",
+ "set": "extended",
+ "note": "body cap raised from 2000 to 8000 characters",
+ "per_run": [
+  0.8823529411764706,
+  0.9411764705882353,
+  0.9411764705882353
+ ],
+ "score": 0.9215686274509803,
+ "cost": 0.0030284100000000005,
+ "results": [
+  {
+   "id": "tt-01",
+   "tags": [
+    "plain"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 744.0,
+   "seconds": 3.5921899666718673,
+   "errors": [],
+   "cost": 9.342000000000001e-05
+  },
+  {
+   "id": "tt-02",
+   "tags": [
+    "plain",
+    "outage"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 784.3333333333334,
+   "seconds": 3.4591985333245248,
+   "errors": [],
+   "cost": 0.0001157
+  },
+  {
+   "id": "tt-03",
+   "tags": [
+    "plain"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 804.0,
+   "seconds": 3.5473595666796123,
+   "errors": [],
+   "cost": 0.00016284
+  },
+  {
+   "id": "tt-04",
+   "tags": [
+    "plain"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 762.0,
+   "seconds": 3.038393200006491,
+   "errors": [],
+   "cost": 0.00010425000000000001
+  },
+  {
+   "id": "tt-05",
+   "tags": [
+    "plain"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 749.0,
+   "seconds": 2.4607535999966785,
+   "errors": [],
+   "cost": 8.916000000000001e-05
+  },
+  {
+   "id": "tt-06",
+   "tags": [
+    "quoted-reply"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 1079.6666666666667,
+   "seconds": 3.3797133333379556,
+   "errors": [],
+   "cost": 0.0003088
+  },
+  {
+   "id": "tt-07",
+   "tags": [
+    "quoted-reply",
+    "long-body"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 1644.3333333333333,
+   "seconds": 3.0910799333263035,
+   "errors": [],
+   "cost": 0.0004557800000000001
+  },
+  {
+   "id": "tt-08",
+   "tags": [
+    "long-body"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 2416.3333333333335,
+   "seconds": 3.9751858999952674,
+   "errors": [],
+   "cost": 0.0007933000000000001
+  },
+  {
+   "id": "tt-09",
+   "tags": [
+    "outage",
+    "terse-subject"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 791.0,
+   "seconds": 3.293642333340055,
+   "errors": [],
+   "cost": 0.00013304999999999998
+  },
+  {
+   "id": "tt-10",
+   "tags": [
+    "private-data"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 958.3333333333334,
+   "seconds": 4.30657596665939,
+   "errors": [],
+   "cost": 0.00037964
+  },
+  {
+   "id": "tt-11",
+   "tags": [
+    "private-data"
+   ],
+   "outcomes": [
+    false,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 952.0,
+   "seconds": 4.109714966674801,
+   "errors": [],
+   "cost": 0.00037161000000000003
+  },
+  {
+   "id": "tt-12",
+   "tags": [
+    "enterprise"
+   ],
+   "outcomes": [
+    false,
+    false,
+    false
+   ],
+   "passed": false,
+   "tokens": 757.0,
+   "seconds": 3.168646833325814,
+   "errors": [],
+   "cost": 9.234e-05
+  },
+  {
+   "id": "tt-13",
+   "tags": [
+    "enterprise",
+    "outage"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 767.6666666666666,
+   "seconds": 2.953853333320391,
+   "errors": [],
+   "cost": 0.00011275
+  },
+  {
+   "id": "tt-14",
+   "tags": [
+    "plain"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 757.3333333333334,
+   "seconds": 3.216958399997869,
+   "errors": [],
+   "cost": 0.00010166000000000001
+  },
+  {
+   "id": "tt-15",
+   "tags": [
+    "plain"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 872.6666666666666,
+   "seconds": 3.7595378333353437,
+   "errors": [],
+   "cost": 0.0002776
+  },
+  {
+   "id": "tt-16",
+   "tags": [
+    "terse-subject"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 767.6666666666666,
+   "seconds": 3.1279492333317953,
+   "errors": [],
+   "cost": 0.0001495
+  },
+  {
+   "id": "tt-17",
+   "tags": [
+    "non-english"
+   ],
+   "outcomes": [
+    true,
+    true,
+    true
+   ],
+   "passed": true,
+   "tokens": 830.3333333333334,
+   "seconds": 3.255257399995268,
+   "errors": [],
+   "cost": 0.00016118
+  }
+ ]
+}

@@ -31,6 +31,18 @@ After session 1, the held-out check: a real project with seams in cascade, repla
 - **"The line moves only when the user decides it" names no one at run time.** Once the charter is written, only code, model and coding agent are left. The skill should say the charter is where the decision lives, and that an agent who cannot meet a request without moving a line stops and says so (the `setup` rule above).
 - **A line the code does not yet hold.** The user put two decisions on the constrained side that the code does not apply (ISO currency list, VAT as a separate field). The format has no place for that; `extract_invoice` marks them "Not yet in code".
 
+## `edd`, first real run (ticket 3.6)
+
+Found by the demo on `triage_ticket`; the run and the evidence are in `trials/results-edd-demo.md`.
+
+- **Dollars with two decimals.** A run under a cent prints and logs as `$0.00`, and so does its estimate.
+- **Tagging failures discards the best results.** The loop asks for the failure category in the case's `tags`; a change to the eval set discards every best result.
+- **The runner keeps outcomes, not outputs.** Reading a failure means paying for the call again, unless the adapter saves the answers itself.
+- **A first run below the target becomes the model's best result.**
+- **`--model` only changes the label.** The runner logs it and never hands it to the adapter, which has to read the model from the environment.
+- **`triage_ticket`: the enterprise raise.** A routine enterprise request the model calls `high` comes out `urgent` (`tt-12`, `requests/07`). Changing the raise moves a constrained line: the user's decision, not taken.
+- **`triage_ticket`: a grader that wants words.** `summary_any` failed a right summary once (`tt-11`); a model judge would need calibrating first.
+
 ## Known weak spots
 
 - **Over-delegation** has no real episode behind it yet. **Substitution** and **templating** were derived from one project's documents and confirmed in passing.

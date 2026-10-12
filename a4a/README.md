@@ -33,6 +33,17 @@ Nothing paid runs without approval: the runner refuses a run that would take the
 
 The model judge reads `EDD_JUDGE_MODEL`, `EDD_JUDGE_BASE_URL` (default Ollama at `http://localhost:11434/v1`; Groq: `https://api.groq.com/openai/v1`) and `EDD_JUDGE_API_KEY`.
 
+### A real run
+
+On the seam `triage_ticket` (a support ticket routed to a queue, with an urgency and a summary), with $2.00 agreed and a target of 0.90 on 17 cases, Haiku 5.5:
+
+| run | change | core | extended | against the target | cost |
+|---|---|---|---|---|---|
+| 1 | the seam as it is | 1.00 | 0.82 | not met | $0.006 |
+| 2 | body cap raised from 2000 to 8000 characters | 1.00 | 0.92 | met | $0.004 |
+
+Each run was approved with its estimate and the running total; the loop stopped at the target with $0.01 spent. The one case still failing needs a line of the charter moved, so it went to the user and was not fixed. The transcript is in [`trials/results-edd-demo.md`](../trials/results-edd-demo.md).
+
 ## Install
 
 In Claude Code: `/plugin marketplace add danielediodati/skills`, then `/plugin install a4a@danielediodati`. To try a local copy without installing: `claude --plugin-dir <path to this folder>`.

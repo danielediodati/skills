@@ -1,0 +1,19 @@
+{
+ "eval_set": "cases.jsonl",
+ "cases_hash": "e72702c53391",
+ "grader_hash": "b550979165d3",
+ "splits": {
+  "dev": {
+   "claude-haiku-5-5": {
+    "score": 0.9215686274509803,
+    "per_run": [
+     0.8823529411764706,
+     0.9411764705882353,
+     0.9411764705882353
+    ],
+    "code": "7f7e776+dirty",
+    "run_id": "20261012T221145013-extended-7f7e776-dirty"
+   }
+  }
+ }
+}

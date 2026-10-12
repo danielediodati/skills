@@ -31,5 +31,3 @@ Session 1's first trials mostly dictated the fix; on eight requests that only de
 **Shows**: a real `edd` run on `triage_ticket`: the spending budget agreed first, the core set before the extended, every approval with its running total, and the verdict against the target and the best result.
 
 `edd` still describes the plugin before session 1: model seams, a one-way rule, smoke and full runs, a baseline. This session rewrites it on `CONTEXT.md` and adds decision 14 on spending.
-
-6. **Demo on `triage_ticket`.** A real run, $2 - [ticket](docs/work/3-edd/issues/06-demo.md)
