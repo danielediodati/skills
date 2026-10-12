@@ -15,7 +15,8 @@ from pathlib import Path
 
 RUNNER = Path(__file__).resolve().parents[1] / "a4a" / "skills" / "edd" / "scripts" / "run_evals.py"
 
-# The fake seam: each case says, run by run, whether its output passes, and what a call costs.
+# The fake seam: each case says, run by run, whether its output passes. FAKE_COST in the
+# environment is what one call costs, in dollars.
 # FAKE_OUTCOMES in the environment overrides a case's outcomes, so the seam can get worse while the
 # eval set stays the same.
 # Every call is appended to calls.txt, so a test sees which cases were paid for.
@@ -24,6 +25,7 @@ import json, os
 from pathlib import Path
 MODEL = "fake-model"
 PROVIDER = "fake"
+COST_PER_CASE = float(os.environ.get("FAKE_COST", "0"))
 CALLS = Path(__file__).with_name("calls.txt")
 
 def run(case_input):
@@ -32,7 +34,7 @@ def run(case_input):
     with CALLS.open("a") as f:
         f.write(case_input["id"] + "\\n")
     outcomes = json.loads(os.environ.get("FAKE_OUTCOMES", "{}")).get(case_input["id"], case_input["outcomes"])
-    return {"output": outcomes[n % len(outcomes)], "cost": case_input.get("cost", 0.0)}
+    return {"output": outcomes[n % len(outcomes)], "cost": COST_PER_CASE}
 '''
 
 GRADER = '''
@@ -41,9 +43,9 @@ def grade(case, result):
 '''
 
 
-def case(case_id: str, outcomes: list[bool], core: bool = False, cost: float = 0.0, split: str = "dev") -> dict:
+def case(case_id: str, outcomes: list[bool], core: bool = False, split: str = "dev") -> dict:
     return {"id": case_id, "split": split, "core": core, "expected": True, "tags": [],
-            "input": {"id": case_id, "outcomes": outcomes, "cost": cost}}
+            "input": {"id": case_id, "outcomes": outcomes}}
 
 
 class FakeEvals:
@@ -62,8 +64,9 @@ class FakeEvals:
         (self.seam / name).write_text("".join(json.dumps(c) + "\n" for c in cases), encoding="utf-8")
 
     def run(self, *args: str, eval_set: str | None = "cases.jsonl",
-            outcomes: dict | None = None) -> subprocess.CompletedProcess:
-        env = {k: v for k, v in os.environ.items() if k not in ("EVAL_SET", "FAKE_OUTCOMES")}
+            outcomes: dict | None = None, cost: float = 0.0) -> subprocess.CompletedProcess:
+        env = {k: v for k, v in os.environ.items() if k not in ("EVAL_SET", "FAKE_OUTCOMES", "FAKE_COST")}
+        env["FAKE_COST"] = str(cost)
         if eval_set is not None:
             env["EVAL_SET"] = eval_set
         if outcomes:
@@ -180,6 +183,57 @@ class CodeVersion(unittest.TestCase):
         done = evals.run("fake", "--target", "0.5", outcomes={"c1": [False], "c2": [False], "c3": [False]})
         self.assertIn("earlier version", done.stdout)
         self.assertIn("WARNING below the best result", done.stdout)
+
+
+class Spending(unittest.TestCase):
+    def setUp(self):
+        self.evals = FakeEvals([case("core-1", [True], core=True), case("core-2", [True], core=True)]
+                               + [case(f"ext-{i}", [True]) for i in range(10)])
+        self.addCleanup(self.evals.close)
+
+    def agree(self, budget: str) -> None:
+        done = self.evals.run("--agree-budget", budget, "--note", "ticket 06", eval_set=None)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_a_paid_run_with_no_agreed_budget_refuses_to_start(self):
+        done = self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.01)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("--agree-budget", done.stderr)
+        self.assertEqual(self.evals.calls(), [])
+
+    def test_a_free_run_needs_no_budget(self):
+        done = self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.0)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_a_run_that_would_pass_the_budget_refuses_to_start_and_prints_the_total_and_the_budget(self):
+        self.agree("0.01")
+        done = self.evals.run("fake", "--target", "0.5", "--k", "3", cost=0.01)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("spent $0.00 of $0.01", done.stderr)
+        self.assertEqual(self.evals.calls(), [])
+
+    def test_the_running_total_is_reported_and_logged_after_every_run(self):
+        self.agree("1.00")
+        first = self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.01)
+        self.assertIn("spent $0.12 of $1.00", first.stdout)
+        second = self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.01)
+        self.assertIn("spent $0.24 of $1.00", second.stdout)
+        self.assertIn("| $0.24 |", (self.evals.root / "log.md").read_text(encoding="utf-8"))
+
+    def test_the_extended_set_does_not_start_when_it_would_pass_the_budget(self):
+        self.agree("0.05")
+        done = self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.01)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("spent $0.02 of $0.05", done.stdout + done.stderr)
+        self.assertEqual(sorted(self.evals.calls()), ["core-1", "core-2"])
+
+    def test_the_check_spends_nothing_and_shows_the_estimate_against_the_budget(self):
+        self.agree("1.00")
+        done = self.evals.run("fake", "--check", "--k", "1", cost=0.01)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.evals.calls(), [])
+        self.assertIn("$0.12", done.stdout)
+        self.assertIn("spent $0.00 of $1.00", done.stdout)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,25 @@ A deterministic seam (same input, same output) is tested with unit tests written
 - **Read the charter** at `evals/<seam>/charter.md`: what the model is free to decide, what code constrains, the target. A seam with no charter gets one first, with the user (the `charter` skill). Only the user changes a charter.
 - **Find the eval set**: `evals/<seam>/cases.jsonl` and `grader.py`, in the formats of [FORMAT.md](FORMAT.md) and [GRADERS.md](GRADERS.md). A seam with no eval set gets one before it changes. Writing cases and graders is the job of the `eval` skill; until it exists, write them from the charter's eval direction following those two files.
 
+## Nothing paid without approval
+
+Eval runs, model screenings and judge calibrations call paid models. Development spending is a constraint this skill holds; it is a different thing from the budget in a charter, which limits what the seam itself may use at run time.
+
+- **Agree the spending budget first.** Before the first paid call of a ticket, ask the user for one budget, in dollars, for the whole ticket. Record the amount they stated: `python evals/run_evals.py --agree-budget <dollars> --note "<ticket>"`.
+- **Free checks before any paid call**: the unit tests of the code around the seam, a dry run of the adapter where it can run without a model call, and `EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --check`, which checks the eval set, imports the adapter and the grader, and prints the estimate and the running total without a call. A paid run that a free check would have stopped is money spent for nothing.
+- **Every request for approval shows the running total**, e.g. "core and extended sets at k=3, about $0.40; spent $0.84 of $2.00". Never ask for one run alone, without the total.
+- The runner refuses to start a run that would take the total past the budget, before the core set and again before the extended set, and logs each run's cost and the total. Raising the budget is the user's decision, asked in one request with the total.
+- **Screen models cheapest first.** When several models are tried, the cheapest that could clear the target runs first; a dearer one runs only when the cheaper ones fall short.
+
+**When the budget is spent** and the runs are still below the target with the charter intact, stop. Put the ways out to the user and take none yourself:
+
+- another model: the best results kept per model show whether one already clears the target;
+- the line moved on purpose: a charter change, the same cases run on both versions, an ADR;
+- a lower target;
+- the failure accepted.
+
+Recommend a model change only with its evidence: what was tried on the model's side (prompt, tool descriptions, examples, sampling) and how it failed, by failure category.
+
 ## The line holds
 
 The charter splits the seam's decisions between the model (freedom) and code (constraint). Where there is freedom, freedom stays; where there is a constraint, the constraint stays. Moving the line is a decision, never a side effect of implementation.

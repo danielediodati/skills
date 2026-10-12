@@ -21,12 +21,14 @@ The contract `run_evals.py` expects:
 
 ```python
 # system.py: runs one case through the system under test.
-MODEL = "qwen3.5:9b"   # logged on every row; --model overrides
-PROVIDER = "ollama"    # logged on every row; --provider overrides
+MODEL = "llama-3.3-70b-versatile"  # logged on every row; --model overrides
+PROVIDER = "groq"                  # logged on every row; --provider overrides
+COST_PER_CASE = 0.0006             # dollars per call, the estimate before a run; 0 for a free local model
 
 def run(case_input: dict) -> dict:
     # Call the real entry point (graph, agent, endpoint) with case_input.
-    # Return {"output": ...} plus, when known, "tokens" (int) and "seconds" (float).
+    # Return {"output": ...} plus, when known, "tokens" (int), "seconds" (float)
+    # and "cost" (float, dollars this call cost; COST_PER_CASE is used when it is missing).
     ...
 
 # grader.py: one grader per seam, versioned with the cases.
@@ -61,18 +63,23 @@ Written by the runner, never edited: the run's settings (eval set, split, `k`, m
 
 Written by the runner, never edited: for each split, the best result of each model on the extended set, with its per-run scores, the run it came from and the code version it was measured on. It also holds the eval set and the hashes of the eval set and `grader.py` the results were measured with: when either hash changes, the runner discards every best result (the measure changed) and says so. A change to the code keeps them, reported as measured on an earlier version.
 
+## `evals/spending.json`
+
+Written by the runner: the spending budget the user agreed for the current ticket (`--agree-budget <dollars> --note "<ticket>"`), what has been spent against it, and the cost of each run. Recording a new budget starts the total at zero. The runner refuses to start a run whose estimate would take the total past the budget; a run whose estimate is zero (a free local model) needs no budget. The estimate prices a call at the mean cost per call of this model's latest run, else at `COST_PER_CASE`.
+
 ## `evals/log.md`
 
 One row per run, newest last, appended by the runner:
 
-| date | commit | seam | eval set | model | provider | split | set | k | score | spread | gains/losses | cost/case | notes |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2026-10-02 | a1b2c3d | planner | cases.jsonl | qwen3.5:9b | ollama | dev | core | 3 | 0.83 | 0.80 to 0.90 | - | 2.0k tok, 13.1 s | - |
-| 2026-10-02 | a1b2c3d | planner | cases.jsonl | qwen3.5:9b | ollama | dev | extended | 3 | 0.71 | 0.67 to 0.75 | - | 2.1k tok, 14.0 s | - |
-| 2026-10-03 | e4f5a6b+dirty | planner | cases.jsonl | qwen3.5:9b | ollama | dev | core | 3 | 0.60 | 0.50 to 0.70 | - | 2.3k tok, 15.2 s | tool descriptions rewritten |
+| date | commit | seam | eval set | model | provider | split | set | k | score | spread | gains/losses | cost/case | cost | spent | notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-02 | a1b2c3d | planner | cases.jsonl | llama-3.3-70b-versatile | groq | dev | core | 3 | 0.83 | 0.80 to 0.90 | - | 2.0k tok, 1.3 s | $0.02 | $0.02 | - |
+| 2026-10-02 | a1b2c3d | planner | cases.jsonl | llama-3.3-70b-versatile | groq | dev | extended | 3 | 0.71 | 0.67 to 0.75 | - | 2.1k tok, 1.4 s | $0.05 | $0.07 | - |
+| 2026-10-03 | e4f5a6b+dirty | planner | cases.jsonl | llama-3.3-70b-versatile | groq | dev | core | 3 | 0.60 | 0.50 to 0.70 | - | 2.3k tok, 1.5 s | $0.02 | $0.09 | tool descriptions rewritten |
 
 - `eval set`: the file named by `EVAL_SET`.
 - `set`: `core` or `extended`; `calibration` for a judge calibration. A `core` row with no `extended` row after it is a change rejected on the core set.
 - `score` and `spread`: defined in SKILL.md, Noise floor.
 - `gains/losses`: paired against the run that holds this model's best result, with the one-sided sign-test p-value.
+- `cost/case`: mean tokens and seconds per case run. `cost`: the dollars this row paid for; an extended row pays only for the cases beyond the core set, whose results it reuses. `spent`: the running total against the agreed budget after this row, `-` when no budget is agreed.
 - `notes`: the one change under test from `--note`, the losses listed by id (keeping the change accepts them), and `best results discarded` when the grader or the eval set changed.

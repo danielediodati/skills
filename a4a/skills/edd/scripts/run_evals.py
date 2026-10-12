@@ -4,12 +4,13 @@
 Copy into <project>/evals/ next to judge.py and calibrate.py. Layout, relative to evals/:
 
     <seam>/<eval set>    one case per line (FORMAT.md), named by the EVAL_SET environment variable
-    <seam>/system.py     run(case_input) -> {"output": ..., "tokens"?: int, "seconds"?: float}
-                         optional constants MODEL and PROVIDER
+    <seam>/system.py     run(case_input) -> {"output": ..., "tokens"?: int, "seconds"?: float, "cost"?: float}
+                         constants MODEL, PROVIDER and COST_PER_CASE (dollars per call, 0 when free)
     <seam>/grader.py     grade(case, result) -> bool, or float in [0, 1] passing at >= 0.5
     <seam>/runs/         written here: one JSON per run
     <seam>/best.json     written here: the best result of each model on each split
     log.md               written here: one row per run
+    spending.json        written here: the spending budget agreed with the user, and what is spent
 
 A run goes in the order of decision 11: the core set first, then the extended set (every case of
 the split) only if the core set reaches the target. A change that fails the core set is rejected
@@ -20,7 +21,15 @@ Below this model's best result by more than the run-to-run spread: a warning. Be
 kept per model with the code version they were measured on; a change to the grader or the eval
 set discards them, a change to the code keeps them, marked as measured on an earlier version.
 
+Nothing paid runs without approval (decision 14). The user agrees a spending budget for the
+ticket first (--agree-budget). Before the core set and again before the extended set, a run whose
+estimated cost would take the total past the budget refuses to start and prints both. Every run
+reports and logs its cost and the running total. --check runs the free checks and shows the
+estimate, without a call.
+
 Examples:
+    python evals/run_evals.py --agree-budget 2.00 --note "ticket 12"   # only once the user agreed it
+    EVAL_SET=cases.jsonl python evals/run_evals.py planner --check
     EVAL_SET=cases.jsonl python evals/run_evals.py planner --target 0.80 --note "tool descriptions rewritten"
     EVAL_SET=cases.jsonl python evals/run_evals.py planner --split heldout --target 0.80
 """
@@ -44,10 +53,11 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__ next to the seams: it would mark the tree dirty
 
 EVAL_SET_VAR = "EVAL_SET"  # names the eval set, a file in the seam's directory, never a path in the code
+SPENDING = "spending.json"
 LOG_HEADER = (
     "| date | commit | seam | eval set | model | provider | split | set | k | score | spread "
-    "| gains/losses | cost/case | notes |\n"
-    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+    "| gains/losses | cost/case | cost | spent | notes |\n"
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 )
 
 
@@ -92,7 +102,7 @@ def git_commit(root: Path) -> str:
         if evals_rel is None:
             return False
         prefix = "" if evals_rel == "." else f"{evals_rel}/"
-        return path == f"{prefix}log.md" or (path.startswith(prefix) and (
+        return path in (f"{prefix}log.md", f"{prefix}{SPENDING}") or (path.startswith(prefix) and (
             "/runs/" in f"/{path}" or path.endswith("/best.json")))
 
     dirty = any(not is_eval_output(line) for line in status if line.strip())
@@ -131,6 +141,12 @@ def load_cases(path: Path, split: str) -> tuple[list[dict], list[dict]]:
     if dupes:
         sys.exit(f"duplicate case ids: {sorted(dupes)}")
     for c in cases:
+        if "input" not in c:
+            sys.exit(f"case {c['id']} has no input")
+        if c.get("split", "dev") not in ("dev", "heldout"):
+            sys.exit(f"case {c['id']}: split must be dev or heldout, not {c['split']!r}")
+        if not isinstance(c.get("core", False), bool):
+            sys.exit(f"case {c['id']}: core must be true or false")
         if c.get("expected") is None and not c.get("rubric"):
             print(f"warning: case {c['id']} has neither expected nor rubric", file=sys.stderr)
     cases = [c for c in cases if c.get("split", "dev") == split]
@@ -140,17 +156,20 @@ def load_cases(path: Path, split: str) -> tuple[list[dict], list[dict]]:
     return core, [c for c in cases if not c.get("core")]
 
 
-def run_case(case: dict, system, grader, k: int) -> dict:
-    """Run one case k times. A run passes when the grader says so; the case when most runs pass."""
-    outcomes, tokens, seconds, errors = [], [], [], []
+def run_case(case: dict, system, grader, k: int, per_call: float) -> dict:
+    """Run one case k times. A run passes when the grader says so; the case when most runs pass.
+    A call costs what the adapter reports, else the estimate per call."""
+    outcomes, tokens, seconds, errors, cost = [], [], [], [], 0.0
     for _ in range(k):
         start = time.perf_counter()
         try:
             result = system.run(case["input"])
-        except Exception as exc:  # a crash of the system is a failed run
+        except Exception as exc:  # a crash of the system is a failed run, and may still be paid
             outcomes.append(False)
             errors.append(f"system: {type(exc).__name__}: {exc}")
+            cost += per_call
             continue
+        cost += result["cost"] if result.get("cost") is not None else per_call
         seconds.append(result.get("seconds", time.perf_counter() - start))
         if result.get("tokens") is not None:
             tokens.append(result["tokens"])
@@ -169,12 +188,67 @@ def run_case(case: dict, system, grader, k: int) -> dict:
         "tokens": sum(tokens) / len(tokens) if tokens else None,
         "seconds": sum(seconds) / len(seconds) if seconds else None,
         "errors": errors,
+        "cost": cost,
     }
 
 
-def run_cases(cases: list[dict], system, grader, k: int, workers: int) -> list[dict]:
+def run_cases(cases: list[dict], system, grader, k: int, workers: int, per_call: float) -> list[dict]:
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        return list(pool.map(lambda c: run_case(c, system, grader, k), cases))
+        return list(pool.map(lambda c: run_case(c, system, grader, k, per_call), cases))
+
+
+# ---------- spending (decision 14) ----------
+
+def cost_per_call(system, runs_dir: Path, model: str) -> float | None:
+    """What one call costs: measured on this model's latest run, else the adapter's COST_PER_CASE."""
+    for path in sorted(runs_dir.glob("*.json"), reverse=True):  # run ids start with a timestamp
+        run = json.loads(path.read_text(encoding="utf-8"))
+        if run.get("model") == model and run.get("calls"):
+            return run["cost"] / run["calls"]
+    return getattr(system, "COST_PER_CASE", None)
+
+
+def read_spending(root: Path) -> dict | None:
+    path = root / SPENDING
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def agree_budget(root: Path, budget: float, note: str) -> int:
+    """Record the spending budget the user agreed for a ticket; the running total starts at zero."""
+    spending = {"budget": budget, "note": note, "agreed": datetime.now().isoformat(timespec="seconds"),
+                "spent": 0.0, "runs": []}
+    (root / SPENDING).write_text(json.dumps(spending, indent=1), encoding="utf-8")
+    print(f"spending budget ${budget:.2f} agreed; {fmt_total(spending)}")
+    return 0
+
+
+def fmt_total(spending: dict | None) -> str:
+    """The running total against the budget, as every report and every request for approval shows it."""
+    if spending is None:
+        return "no spending budget agreed"
+    agreed_for = f" agreed for {spending['note']}" if spending.get("note") else ""
+    return f"spent ${spending['spent']:.2f} of ${spending['budget']:.2f}{agreed_for}"
+
+
+def refusal(spending: dict | None, estimate: float, what: str) -> str | None:
+    """Why a run of this estimated cost may not start, or None when it may."""
+    if estimate <= 0:
+        return None
+    if spending is None:
+        return (f"{what} would cost about ${estimate:.2f} and no spending budget is agreed: agree one "
+                f"with the user, then run --agree-budget <dollars>")
+    if spending["spent"] + estimate > spending["budget"] + 1e-9:
+        return (f"{what} would cost about ${estimate:.2f}; {fmt_total(spending)}: it would pass the "
+                f"budget. Ask the user before anything else is paid")
+    return None
+
+
+def record_spending(root: Path, spending: dict | None, run_id: str, cost: float) -> None:
+    if spending is None:
+        return
+    spending["spent"] += cost
+    spending["runs"].append({"run_id": run_id, "cost": cost})
+    (root / SPENDING).write_text(json.dumps(spending, indent=1), encoding="utf-8")
 
 
 def scores(results: list[dict], k: int) -> tuple[float, list[float]]:
@@ -240,7 +314,11 @@ def fmt_cost(results: list[dict]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run one seam's evals (edd skill).")
-    parser.add_argument("seam", help="directory name under the evals root")
+    parser.add_argument("seam", nargs="?", help="directory name under the evals root")
+    parser.add_argument("--agree-budget", type=float, default=None, metavar="DOLLARS",
+                        help="run nothing: record the spending budget the user agreed for this ticket")
+    parser.add_argument("--check", action="store_true",
+                        help="run nothing paid: check the eval set and the adapter, show the cost estimate")
     parser.add_argument("--target", type=float, default=None,
                         help="the charter's target: the core set must reach it before the extended set runs")
     parser.add_argument("--split", default="dev", choices=["dev", "heldout"])
@@ -253,12 +331,16 @@ def main() -> int:
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
+    if args.agree_budget is not None:
+        return agree_budget(root, args.agree_budget, args.note)
+    if not args.seam:
+        parser.error("the seam is required")
     seam_dir = root / args.seam
     runs_dir = seam_dir / "runs"
     if args.k % 2 == 0:
         sys.exit("use an odd k, so a case's majority is never a tie")
     eval_set = eval_set_path(seam_dir)
-    if args.target is None:
+    if args.target is None and not args.check:
         sys.exit("--target is required: the charter's target decides whether the extended set runs")
 
     sys.path[:0] = [str(seam_dir), str(root)]  # graders can import judge.py from the evals root
@@ -273,12 +355,36 @@ def main() -> int:
                 "model": model, "provider": provider, "commit": commit,
                 "cases_hash": file_hash(eval_set), "grader_hash": file_hash(seam_dir / "grader.py")}
 
+    # Free checks before any paid call: the eval set has been read and checked, the adapter and the
+    # grader import. The estimate prices every call at the last measured cost of this model.
+    per_call = cost_per_call(system, runs_dir, model)
+    if per_call is None:
+        sys.exit(f"no cost estimate for {model}: declare COST_PER_CASE in system.py, in dollars per call "
+                 f"(0 for a free local model)")
+    spending = read_spending(root)
+    core_estimate, rest_estimate = per_call * k * len(core), per_call * k * len(rest)
+    if args.check:
+        print(f"{args.seam} | {eval_set.name} | {args.split}: {len(core)} core cases, {len(rest)} more in the "
+              f"extended set; nothing called")
+        print(f"estimate at k={k}: core set ${core_estimate:.2f}, extended set ${core_estimate + rest_estimate:.2f} "
+              f"in all (${per_call:.4f} per call)")
+        print(fmt_total(spending))
+        return 0
+    why_not = refusal(spending, core_estimate, f"the core set ({len(core)} cases, k={k})")
+    if why_not:
+        sys.exit(why_not)
+
     # The core set first: a change that fails it is rejected without a call spent on the rest.
-    core_results = run_cases(core, system, grader, k, args.workers)
+    core_results = run_cases(core, system, grader, k, args.workers, per_call)
     core_score, core_per_run = scores(core_results, k)
-    core_run = save_run(root, runs_dir, settings, "core", core_results, core_score, core_per_run, args.note)
+    core_cost = sum(r["cost"] for r in core_results)
+    spent_before = spending["spent"] if spending else 0.0
+    core_run = save_run(root, runs_dir, settings, "core", core_results, core_score, core_per_run, args.note,
+                        spent=spent_before + core_cost if spending else None)
+    record_spending(root, spending, core_run, core_cost)
     report = [f"{args.seam} | {eval_set.name} | {args.split} | k={k} | {model} ({provider}) | {commit}",
-              f"core set: {core_score:.2f} (spread {spread(core_per_run)}) over {len(core_results)} cases"]
+              f"core set: {core_score:.2f} (spread {spread(core_per_run)}) over {len(core_results)} cases",
+              f"cost ${core_cost:.2f}; {fmt_total(spending)}"]
     if core_score < args.target:
         report.append(f"target {args.target:.2f}: not met on the core set; the extended set "
                       f"({len(rest)} more cases) does not run")
@@ -287,7 +393,13 @@ def main() -> int:
         return 1
 
     # The extended set: the whole split, reusing the core results already paid for.
-    results = core_results + run_cases(rest, system, grader, k, args.workers)
+    why_not = refusal(spending, rest_estimate, f"the extended set ({len(rest)} more cases, k={k})")
+    if why_not:
+        emit(report)
+        sys.exit(why_not)
+    rest_results = run_cases(rest, system, grader, k, args.workers, per_call)
+    rest_cost = sum(r["cost"] for r in rest_results)
+    results = core_results + rest_results
     score, per_run = scores(results, k)
     report.append(f"extended set: {score:.2f} (spread {spread(per_run)}) over {len(results)} cases")
     tags = sorted({t for r in results for t in r["tags"]})
@@ -333,7 +445,9 @@ def main() -> int:
     report.extend(verdict(score, per_run, args.target, mine))
 
     run_id = save_run(root, runs_dir, settings, "extended", results, score, per_run, "; ".join(notes),
-                      paired=paired)
+                      paired=paired, cost=rest_cost, spent=spending["spent"] + rest_cost if spending else None)
+    record_spending(root, spending, run_id, rest_cost)
+    report.append(f"cost ${rest_cost:.2f} for the rest of the set; {fmt_total(spending)}")
     if mine is None or score > mine["score"]:
         of_split[model] = {"score": score, "per_run": per_run, "code": commit, "run_id": run_id}
         report.append(f"new best result for {model} on {args.split}")
@@ -348,18 +462,25 @@ def spread(per_run: list[float]) -> str:
 
 
 def save_run(root: Path, runs_dir: Path, settings: dict, which: str, results: list[dict],
-             score: float, per_run: list[float], notes: str, paired: str = "-") -> str:
-    """Persist one run and its log row before anything is printed: a broken console never loses a run."""
+             score: float, per_run: list[float], notes: str, paired: str = "-",
+             cost: float | None = None, spent: float | None = None) -> str:
+    """Persist one run and its log row before anything is printed: a broken console never loses a run.
+    The cost is what this run paid for: the extended run reuses the core results, so it pays only
+    for the rest of the set."""
     now = datetime.now()
     run_id = (now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}-{which}-"
               + settings["commit"].replace("+", "-"))
+    cost = sum(r["cost"] for r in results) if cost is None else cost
+    calls = settings["k"] * len(results)
     run = {"run_id": run_id, **settings, "set": which, "note": notes,
-           "per_run": per_run, "score": score, "results": results}
+           "per_run": per_run, "score": score, "cost": sum(r["cost"] for r in results), "calls": calls,
+           "results": results}
     runs_dir.mkdir(parents=True, exist_ok=True)
     (runs_dir / f"{run_id}.json").write_text(json.dumps(run, indent=1), encoding="utf-8")
     append_log(root, [now.strftime("%Y-%m-%d"), settings["commit"], settings["seam"], settings["eval_set"],
                       settings["model"], settings["provider"], settings["split"], which, settings["k"],
-                      f"{score:.2f}", spread(per_run), paired, fmt_cost(results), notes or "-"])
+                      f"{score:.2f}", spread(per_run), paired, fmt_cost(results), f"${cost:.2f}",
+                      "-" if spent is None else f"${spent:.2f}", notes or "-"])
     return run_id
 
 

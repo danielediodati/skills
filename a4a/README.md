@@ -24,8 +24,12 @@ Per project:
 ```bash
 mkdir -p evals && cp <a4a>/skills/edd/scripts/*.py evals/
 # per seam: evals/<seam>/charter.md, cases.jsonl, system.py, grader.py (see FORMAT.md)
+python evals/run_evals.py --agree-budget 2.00 --note "ticket 12"        # the budget the user agreed
+EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --check            # free: checks and the estimate
 EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --target 0.80 --note "one change"
 ```
+
+Nothing paid runs without approval: the runner refuses a run that would take the total past the agreed budget, and every run reports what it cost and the running total.
 
 The model judge reads `EDD_JUDGE_MODEL`, `EDD_JUDGE_BASE_URL` (default Ollama at `http://localhost:11434/v1`; Groq: `https://api.groq.com/openai/v1`) and `EDD_JUDGE_API_KEY`.
 

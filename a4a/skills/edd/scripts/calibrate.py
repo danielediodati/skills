@@ -90,7 +90,7 @@ def main() -> int:
                       os.environ.get("EDD_JUDGE_MODEL", "?"),
                       os.environ.get("EDD_JUDGE_BASE_URL", "http://localhost:11434/v1"),
                       "calibration", "calibration", 1,
-                      f"{min(all_rates):.2f}" if all_rates else "-", "-", "-", "-",
+                      f"{min(all_rates):.2f}" if all_rates else "-", "-", "-", "-", "-", "-",
                       "pass/fail agreement: " + "; ".join(summary)])
     print("calibrated" if ok else "not calibrated: rewrite or split the criteria marked BELOW")
     return 0 if ok else 1

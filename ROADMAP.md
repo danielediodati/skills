@@ -33,5 +33,4 @@ Session 1's first trials mostly dictated the fix; on eight requests that only de
 `edd` still describes the plugin before session 1: model seams, a one-way rule, smoke and full runs, a baseline. This session rewrites it on `CONTEXT.md` and adds decision 14 on spending.
 
 4. **The diff against the charter as it was.** Before a change is accepted - [ticket](docs/work/3-edd/issues/04-diff-check.md)
-5. **Nothing paid without approval.** Budget first, running total always shown - [ticket](docs/work/3-edd/issues/05-spending.md)
 6. **Demo on `triage_ticket`.** A real run, $2 - [ticket](docs/work/3-edd/issues/06-demo.md)
