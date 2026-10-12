@@ -32,7 +32,6 @@ Session 1's first trials mostly dictated the fix; on eight requests that only de
 
 `edd` still describes the plugin before session 1: model seams, a one-way rule, smoke and full runs, a baseline. This session rewrites it on `CONTEXT.md` and adds decision 14 on spending.
 
-1. **`edd` speaks the plugin's language.** Stochastic seams, the symmetric rule, no external skills - [ticket](docs/work/3-edd/issues/01-edd-vocabulary.md)
 2. **Core and extended sets.** With the eval set named in the environment - [ticket](docs/work/3-edd/issues/02-core-extended.md)
 3. **Best results per model.** Fail below the target, warn below the best result - [ticket](docs/work/3-edd/issues/03-best-results.md)
 4. **The diff against the charter as it was.** Before a change is accepted - [ticket](docs/work/3-edd/issues/04-diff-check.md)

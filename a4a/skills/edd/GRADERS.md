@@ -8,7 +8,7 @@ A grader turns one output into pass or fail, or into a score in [0, 1] that pass
 4. **Model judge**: a rubric of 2 to 5 binary criteria, each answered yes or no with a quoted span of the output as evidence. Binary criteria are steadier across runs and easier to calibrate than a 1 to 10 scale. A criterion the judge cannot support with a quote that really occurs in the output counts as no; `scripts/judge.py` checks the quotes.
 5. **Human label**: ground truth for calibrating every rung above, and the grader of last resort.
 
-A deterministic grader on a model seam does not make the seam deterministic: the grader checks the output, the model still produces it.
+A deterministic grader on a stochastic seam does not make the seam deterministic: the grader checks the output, the model still produces it.
 
 ## Calibrating a model judge
 
@@ -24,4 +24,4 @@ A model judge grades nothing that decides a change until it is calibrated:
 
 An agent's final answer can be right for the wrong reasons. When the path matters, grade the trajectory as well: the tools called, their order where the order matters, the number of steps against a budget, whether the agent verified its result before declaring done.
 
-Keep trajectory criteria to what the spec requires. Each extra criterion freezes one implementation and turns the eval into a test of internals, the same failure the `tdd` skill calls implementation-coupled.
+Keep trajectory criteria to what the spec requires. Each extra criterion freezes one implementation and turns the eval into a test of internals: a test coupled to the implementation, not to the behaviour.
