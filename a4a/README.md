@@ -24,7 +24,7 @@ Per project:
 ```bash
 mkdir -p evals && cp <a4a>/skills/edd/scripts/*.py evals/
 # per seam: evals/<seam>/charter.md, cases.jsonl, system.py, grader.py (see FORMAT.md)
-python evals/run_evals.py <seam> --note "one change"
+EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --target 0.80 --note "one change"
 ```
 
 The model judge reads `EDD_JUDGE_MODEL`, `EDD_JUDGE_BASE_URL` (default Ollama at `http://localhost:11434/v1`; Groq: `https://api.groq.com/openai/v1`) and `EDD_JUDGE_API_KEY`.

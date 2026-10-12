@@ -86,7 +86,7 @@ def main() -> int:
 
     all_rates = [r for labels in pairs.values() for r in agreement(labels).values()
                  if isinstance(r, float)]
-    append_log(root, [datetime.now().strftime("%Y-%m-%d"), git_commit(root), args.seam,
+    append_log(root, [datetime.now().strftime("%Y-%m-%d"), git_commit(root), args.seam, "calibration.jsonl",
                       os.environ.get("EDD_JUDGE_MODEL", "?"),
                       os.environ.get("EDD_JUDGE_BASE_URL", "http://localhost:11434/v1"),
                       "calibration", "calibration", 1,

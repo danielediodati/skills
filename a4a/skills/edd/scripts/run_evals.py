@@ -3,18 +3,21 @@
 
 Copy into <project>/evals/ next to judge.py and calibrate.py. Layout, relative to evals/:
 
-    <seam>/cases.jsonl   one case per line (FORMAT.md)
+    <seam>/<eval set>    one case per line (FORMAT.md), named by the EVAL_SET environment variable
     <seam>/system.py     run(case_input) -> {"output": ..., "tokens"?: int, "seconds"?: float}
                          optional constants MODEL and PROVIDER
     <seam>/grader.py     grade(case, result) -> bool, or float in [0, 1] passing at >= 0.5
     <seam>/runs/         written here: one JSON per run, plus baseline-<split>.txt
     log.md               written here: one row per run
 
+A run goes in the order of decision 11: the core set first, then the extended set (every case of
+the split) only if the core set reaches the target. A change that fails the core set is rejected
+without a call spent on the rest.
+
 Examples:
-    python evals/run_evals.py planner --speed smoke
-    python evals/run_evals.py planner --k 3 --note "tool descriptions rewritten"
-    python evals/run_evals.py planner --promote-last            # keep the change just measured
-    python evals/run_evals.py planner --split heldout --k 3 --target 0.80
+    EVAL_SET=cases.jsonl python evals/run_evals.py planner --target 0.80 --note "tool descriptions rewritten"
+    EVAL_SET=cases.jsonl python evals/run_evals.py planner --promote-last   # keep the change just measured
+    EVAL_SET=cases.jsonl python evals/run_evals.py planner --split heldout --target 0.80
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import os
 import subprocess
 import sys
 import time
@@ -34,11 +38,11 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True  # no __pycache__ next to the seams: it would mark the tree dirty
 
-SMOKE_FALLBACK = 8  # smoke subset size when no case is marked "smoke"
+EVAL_SET_VAR = "EVAL_SET"  # names the eval set, a file in the seam's directory, never a path in the code
 LOG_HEADER = (
-    "| date | commit | seam | model | provider | split | speed | k | score | spread "
+    "| date | commit | seam | eval set | model | provider | split | set | k | score | spread "
     "| gains/losses | cost/case | notes |\n"
-    "|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
 )
 
 
@@ -55,7 +59,7 @@ def load_module(path: Path, name: str):
 
 
 def file_hash(path: Path) -> str:
-    """Short content hash, used to detect a grader or case set changed since the baseline."""
+    """Short content hash, used to detect a grader or eval set changed since the baseline."""
     return hashlib.sha256(path.read_bytes()).hexdigest()[:12] if path.exists() else "-"
 
 
@@ -101,9 +105,21 @@ def append_log(root: Path, cells: list) -> None:
 
 # ---------- running a seam ----------
 
-def load_cases(seam_dir: Path, split: str, speed: str) -> list[dict]:
-    """Read cases.jsonl, validate ids, and select the split and speed subset."""
-    lines = (seam_dir / "cases.jsonl").read_text(encoding="utf-8").splitlines()
+def eval_set_path(seam_dir: Path) -> Path:
+    """The eval set named in the environment. A run without it refuses to start."""
+    name = os.environ.get(EVAL_SET_VAR)
+    if not name:
+        sys.exit(f"{EVAL_SET_VAR} is not set: name the eval set in the environment, "
+                 f"e.g. {EVAL_SET_VAR}=cases.jsonl for {seam_dir / 'cases.jsonl'}")
+    path = seam_dir / name
+    if not path.is_file():
+        sys.exit(f"{EVAL_SET_VAR}={name}: no such eval set in {seam_dir}")
+    return path
+
+
+def load_cases(path: Path, split: str) -> tuple[list[dict], list[dict]]:
+    """Read the eval set, validate it, and return the split's core cases and the rest."""
+    lines = path.read_text(encoding="utf-8").splitlines()
     cases = [json.loads(line) for line in lines if line.strip()]
     dupes = [i for i, n in Counter(c["id"] for c in cases).items() if n > 1]
     if dupes:
@@ -112,12 +128,10 @@ def load_cases(seam_dir: Path, split: str, speed: str) -> list[dict]:
         if c.get("expected") is None and not c.get("rubric"):
             print(f"warning: case {c['id']} has neither expected nor rubric", file=sys.stderr)
     cases = [c for c in cases if c.get("split", "dev") == split]
-    if speed == "smoke":
-        marked = [c for c in cases if c.get("smoke")]
-        cases = marked or sorted(cases, key=lambda c: c["id"])[:SMOKE_FALLBACK]
-    if not cases:
-        sys.exit(f"no {split} cases for speed {speed} in {seam_dir}")
-    return cases
+    core = [c for c in cases if c.get("core")]
+    if not core:
+        sys.exit(f"no core {split} cases in {path}: mark the core set with \"core\": true (FORMAT.md)")
+    return core, [c for c in cases if not c.get("core")]
 
 
 def run_case(case: dict, system, grader, k: int) -> dict:
@@ -150,6 +164,17 @@ def run_case(case: dict, system, grader, k: int) -> dict:
         "seconds": sum(seconds) / len(seconds) if seconds else None,
         "errors": errors,
     }
+
+
+def run_cases(cases: list[dict], system, grader, k: int, workers: int) -> list[dict]:
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        return list(pool.map(lambda c: run_case(c, system, grader, k), cases))
+
+
+def scores(results: list[dict], k: int) -> tuple[float, list[float]]:
+    """Score: mean over the k runs of the fraction of cases passed; per_run: those k fractions."""
+    per_run = [sum(r["outcomes"][j] for r in results) / len(results) for j in range(k)]
+    return sum(per_run) / k, per_run
 
 
 def sign_test(gains: int, losses: int) -> float:
@@ -187,17 +212,17 @@ def fmt_cost(results: list[dict]) -> str:
 
 
 def promote_last(root: Path, seam: str, split: str, note: str) -> int:
-    """Keep the change just measured: mark the latest full run of the split as its baseline."""
+    """Keep the change just measured: mark the latest extended run of the split as its baseline."""
     runs_dir = root / seam / "runs"
     runs = [json.loads(f.read_text(encoding="utf-8")) for f in sorted(runs_dir.glob("*.json"))]
-    runs = [r for r in runs if r["split"] == split and r["speed"] == "full"]
+    runs = [r for r in runs if r["split"] == split and r["set"] == "extended"]
     if not runs:
-        sys.exit(f"no full {split} run to promote in {runs_dir}")
+        sys.exit(f"no extended {split} run to promote in {runs_dir}")
     last = runs[-1]  # run ids start with a timestamp, so file order is time order
     (runs_dir / f"baseline-{split}.txt").write_text(last["run_id"], encoding="utf-8")
-    append_log(root, [datetime.now().strftime("%Y-%m-%d"), last["commit"], seam, last["model"],
-                      last["provider"], split, "promote", last["k"], f"{last['score']:.2f}", "-", "-", "-",
-                      "; ".join(x for x in (f"promoted {last['run_id']}", note) if x)])
+    append_log(root, [datetime.now().strftime("%Y-%m-%d"), last["commit"], seam, last["eval_set"],
+                      last["model"], last["provider"], split, "promote", last["k"], f"{last['score']:.2f}",
+                      "-", "-", "-", "; ".join(x for x in (f"promoted {last['run_id']}", note) if x)])
     print(f"promoted {last['run_id']} (score {last['score']:.2f}) to baseline for {split}")
     return 0
 
@@ -205,16 +230,16 @@ def promote_last(root: Path, seam: str, split: str, note: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run one seam's evals (edd skill).")
     parser.add_argument("seam", help="directory name under the evals root")
+    parser.add_argument("--target", type=float, default=None,
+                        help="the charter's target: the core set must reach it before the extended set runs")
     parser.add_argument("--split", default="dev", choices=["dev", "heldout"])
-    parser.add_argument("--speed", default="full", choices=["smoke", "full"])
-    parser.add_argument("--k", type=int, default=None, help="runs per case (default: 1 smoke, 3 full)")
+    parser.add_argument("--k", type=int, default=3, help="runs per case, odd")
     parser.add_argument("--workers", type=int, default=1, help="cases run in parallel (1 for local CPU models)")
     parser.add_argument("--note", default="", help="the one change under test")
     parser.add_argument("--baseline", default=None, help="run id to compare against (default: promoted baseline)")
     parser.add_argument("--promote", action="store_true", help="make this run the baseline for its split")
     parser.add_argument("--promote-last", action="store_true",
-                        help="run nothing: make the latest full run of this split the baseline")
-    parser.add_argument("--target", type=float, default=None, help="exit 1 when the score is below this")
+                        help="run nothing: make the latest extended run of this split the baseline")
     parser.add_argument("--model", default=None)
     parser.add_argument("--provider", default=None)
     parser.add_argument("--root", default=str(Path(__file__).resolve().parent), help="evals root directory")
@@ -223,43 +248,43 @@ def main() -> int:
     root = Path(args.root).resolve()
     seam_dir = root / args.seam
     runs_dir = seam_dir / "runs"
-    k = args.k or (1 if args.speed == "smoke" else 3)
-    if k % 2 == 0:
+    if args.k % 2 == 0:
         sys.exit("use an odd k, so a case's majority is never a tie")
-    if args.promote and args.speed == "smoke":
-        sys.exit("smoke runs steer, they never decide: promote a full run")
     if args.promote_last:
         return promote_last(root, args.seam, args.split, args.note)
+    eval_set = eval_set_path(seam_dir)
+    if args.target is None:
+        sys.exit("--target is required: the charter's target decides whether the extended set runs")
 
     sys.path[:0] = [str(seam_dir), str(root)]  # graders can import judge.py from the evals root
     system = load_module(seam_dir / "system.py", f"{args.seam}_system")
     grader = load_module(seam_dir / "grader.py", f"{args.seam}_grader")
-    cases = load_cases(seam_dir, args.split, args.speed)
+    core, rest = load_cases(eval_set, args.split)
     model = args.model or getattr(system, "MODEL", "?")
     provider = args.provider or getattr(system, "PROVIDER", "?")
     commit = git_commit(root)
+    k = args.k
+    settings = {"seam": args.seam, "eval_set": eval_set.name, "split": args.split, "k": k,
+                "model": model, "provider": provider, "commit": commit,
+                "cases_hash": file_hash(eval_set), "grader_hash": file_hash(seam_dir / "grader.py")}
 
-    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
-        results = list(pool.map(lambda c: run_case(c, system, grader, k), cases))
+    # The core set first: a change that fails it is rejected without a call spent on the rest.
+    core_results = run_cases(core, system, grader, k, args.workers)
+    core_score, core_per_run = scores(core_results, k)
+    core_run = save_run(root, runs_dir, settings, "core", core_results, core_score, core_per_run, args.note)
+    report = [f"{args.seam} | {eval_set.name} | {args.split} | k={k} | {model} ({provider}) | {commit}",
+              f"core set: {core_score:.2f} (spread {spread(core_per_run)}) over {len(core_results)} cases"]
+    if core_score < args.target:
+        report.append(f"target {args.target:.2f}: not met on the core set; the extended set "
+                      f"({len(rest)} more cases) does not run")
+        report.append(f"run saved: {runs_dir / (core_run + '.json')}")
+        emit(report)
+        return 1
 
-    # Score: mean over the k runs of the fraction of cases passed; spread: min to max of those.
-    per_run = [sum(r["outcomes"][j] for r in results) / len(results) for j in range(k)]
-    score = sum(per_run) / k
-    spread = f"{min(per_run):.2f} to {max(per_run):.2f}"
-
-    now = datetime.now()
-    run_id = now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}-" + commit.replace("+", "-")
-    run = {
-        "run_id": run_id, "seam": args.seam, "split": args.split, "speed": args.speed, "k": k,
-        "model": model, "provider": provider, "commit": commit, "note": args.note,
-        "cases_hash": file_hash(seam_dir / "cases.jsonl"),
-        "grader_hash": file_hash(seam_dir / "grader.py"),
-        "per_run": per_run, "score": score, "results": results,
-    }
-
-    # Build the report first, persist the run, print last: a broken console never loses a run.
-    report = [f"{args.seam} | {args.split} | {args.speed} | k={k} | {model} ({provider}) | {commit}",
-              f"score {score:.2f} (spread {spread}) over {len(results)} cases"]
+    # The extended set: the whole split, reusing the core results already paid for.
+    results = core_results + run_cases(rest, system, grader, k, args.workers)
+    score, per_run = scores(results, k)
+    report.append(f"extended set: {score:.2f} (spread {spread(per_run)}) over {len(results)} cases")
     tags = sorted({t for r in results for t in r["tags"]})
     if tags:
         by_tag = []
@@ -277,10 +302,9 @@ def main() -> int:
     paired = "-"
     baseline = read_baseline(runs_dir, args.split, args.baseline)
     if baseline is None:
-        if args.speed == "full":
-            args.promote = True
-            notes.append("first baseline")
-        report.append("no baseline for this split yet" + ("; this run becomes it" if args.promote else ""))
+        args.promote = True
+        notes.append("first baseline")
+        report.append("no baseline for this split yet; this run becomes it")
     else:
         before = {r["id"]: r["passed"] for r in baseline["results"]}
         common = [r for r in results if r["id"] in before]
@@ -294,37 +318,55 @@ def main() -> int:
         if losses:
             report.append(f"  losses: {', '.join(losses)} (keeping this change accepts them)")
             notes.append(f"losses: {', '.join(losses)}")
-        if baseline["grader_hash"] != run["grader_hash"]:
+        if baseline["grader_hash"] != settings["grader_hash"]:
             report.append("WARNING grader.py changed since the baseline: run the unchanged system with the "
                           "new grader and promote that run before testing a system change (moving goalposts)")
-        if baseline["cases_hash"] != run["cases_hash"]:
-            report.append(f"note: cases.jsonl changed since the baseline; paired comparison uses the "
+        if baseline["cases_hash"] != settings["cases_hash"]:
+            report.append(f"note: the eval set changed since the baseline; paired comparison uses the "
                           f"{len(common)} shared cases")
-        if args.speed == "full":
-            beyond = score > max(baseline["per_run"])
-            report.append(f"beyond noise: {'yes' if beyond else 'no'} "
-                          f"({score:.2f} vs baseline max {max(baseline['per_run']):.2f})")
+        beyond = score > max(baseline["per_run"])
+        report.append(f"beyond noise: {'yes' if beyond else 'no'} "
+                      f"({score:.2f} vs baseline max {max(baseline['per_run']):.2f})")
 
-    met = None if args.target is None else score >= args.target
-    if met is not None:
-        report.append(f"target {args.target:.2f}: {'met' if met else 'not met'}")
-
-    # Persist the run, then the baseline marker and the log row.
-    runs_dir.mkdir(parents=True, exist_ok=True)
-    (runs_dir / f"{run_id}.json").write_text(json.dumps(run, indent=1), encoding="utf-8")
+    met = score >= args.target
+    report.append(f"target {args.target:.2f}: {'met' if met else 'not met'}")
+    if args.promote:
+        notes.append("promoted")
+    run_id = save_run(root, runs_dir, settings, "extended", results, score, per_run, "; ".join(notes),
+                      paired=paired)
     if args.promote:
         (runs_dir / f"baseline-{args.split}.txt").write_text(run_id, encoding="utf-8")
-        notes.append("promoted")
         report.append(f"promoted {run_id} to baseline for {args.split}")
-    append_log(root, [datetime.now().strftime("%Y-%m-%d"), commit, args.seam, model, provider,
-                      args.split, args.speed, k, f"{score:.2f}", spread, paired,
-                      fmt_cost(results), "; ".join(notes) or "-"])
     report.append(f"run saved: {runs_dir / (run_id + '.json')}")
+    emit(report)
+    return 0 if met else 1
+
+
+def spread(per_run: list[float]) -> str:
+    return f"{min(per_run):.2f} to {max(per_run):.2f}"
+
+
+def save_run(root: Path, runs_dir: Path, settings: dict, which: str, results: list[dict],
+             score: float, per_run: list[float], notes: str, paired: str = "-") -> str:
+    """Persist one run and its log row before anything is printed: a broken console never loses a run."""
+    now = datetime.now()
+    run_id = (now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}-{which}-"
+              + settings["commit"].replace("+", "-"))
+    run = {"run_id": run_id, **settings, "set": which, "note": notes,
+           "per_run": per_run, "score": score, "results": results}
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    (runs_dir / f"{run_id}.json").write_text(json.dumps(run, indent=1), encoding="utf-8")
+    append_log(root, [now.strftime("%Y-%m-%d"), settings["commit"], settings["seam"], settings["eval_set"],
+                      settings["model"], settings["provider"], settings["split"], which, settings["k"],
+                      f"{score:.2f}", spread(per_run), paired, fmt_cost(results), notes or "-"])
+    return run_id
+
+
+def emit(report: list[str]) -> None:
     try:
         print("\n".join(report))
     except (BrokenPipeError, UnicodeEncodeError):
         pass  # the run and the log row are already on disk
-    return 1 if met is False else 0
 
 
 if __name__ == "__main__":

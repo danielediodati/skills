@@ -25,7 +25,7 @@ The charter splits the seam's decisions between the model (freedom) and code (co
 ## The loop
 
 1. **One change.** A prompt, a tool description, the model, the code around the call, a sampling parameter, a retrieval setting. Two changes in one run cannot be attributed.
-2. **Core set, then extended set.** The core set runs first; a change that fails it is rejected without spending on the rest. The extended set, the whole eval set, runs only after the core passes, and only it can accept a change.
+2. **Core set, then extended set.** `EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --target <charter's target> --note "<the change>"`. The core set (the cases marked `core`) runs first; a change whose core score is below the target is rejected without a call spent on the rest. The extended set, every case of the split, runs only after the core passes, and only it can accept a change. The eval set is named in the environment, never by a path in the code.
 3. **Verdict.** Below the charter's target: failure, the only one. Below this model's best result by more than the run-to-run spread, at or above the target: a warning in the report, not a failure. The best result informs; the target decides.
 4. **Read the losses.** The runner lists by case id the cases the change turned from pass to fail. Keeping the change accepts them; say so to the user.
 5. **Read failures.** Read the failing outputs and tag each with a failure category in the case's `tags`. The categories, not the score, choose the next change.
