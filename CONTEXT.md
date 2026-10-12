@@ -55,6 +55,7 @@ a4a/skills/<skill>/SKILL.md
 | **Grader** | Scores one output: exact check, rule, or calibrated model judge. |
 | **Result** | One score, identified by four things: the seam's code, the eval set, the grader and the model. The four identify a measurement, not the seam: the seam is what lasts, with its name and charter, while the code under it changes. |
 | **Best result** | The highest result a model has reached on a seam's eval set, kept for every model with the code version it was measured on. Given in every run's report; a run below it raises a warning, not a failure. Replaces the term "baseline". |
+| **Spending budget** | The money a ticket may spend on paid model calls while the system is developed: eval runs, trials, model screenings. Agreed with the user before the first paid call. Distinct from the budget in a seam charter, which limits what the seam itself may use at run time. |
 | **Noise floor** | Run-to-run spread of a seam's score; differences inside it are not improvements. |
 
 ## Decisions
@@ -72,6 +73,7 @@ a4a/skills/<skill>/SKILL.md
 11. **Four skills, named for what they produce, in order of use:** `setup`, `charter`, `eval`, `edd`. `edd` runs only when a stochastic seam changes: the core set first, the extended set only if the core passes.
 12. **A run has two lines to hold, and only one can fail it.** Below the target set in the charter: failure. Below that model's best result but at or above the target: a warning in the report, raised only when the gap is larger than the run-to-run spread, because the highest score is partly a lucky run. The best result informs; the target decides.
 13. **The grader and the eval set invalidate, the code ages, the model distinguishes.** A change to the grader or the eval set discards every best result of that seam: the measure changed, so earlier and later scores do not compare. A change to the seam's code keeps them, marked as measured on an earlier version: for the same model they are the reference the warning needs, and between models they are reported as out of date until that model is run again. The model is the key the best results are kept by. A charter change discards nothing by itself: when it matters, cases or a grader change with it, and those discard.
+14. **Development spending is a constraint the plugin holds.** Nothing paid runs without the user's approval. A spending budget is agreed for the whole ticket first; every later request for approval shows the running total; free local checks run before any paid call; models are screened cheapest first. The incident behind it: one ticket spent about $8 through small approvals with the total never shown, $1.14 of it on a screening a free local check would have caught.
 
 ## Conventions for skills
 

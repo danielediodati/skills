@@ -4,15 +4,11 @@ What is still undecided or undone after the design session of 2026-10-06. Decisi
 
 ## Decisions
 
-The decisions taken are in `CONTEXT.md`, numbered 1 to 13.
+The decisions taken are in `CONTEXT.md`, numbered 1 to 14.
 
 ## The test that gated everything else
 
-The plugin rested on one untested claim: a seam charter plus the rule in `AGENTS.md` changes what a coding agent does. Session 1 tested it (`trials/results.md`): without the charter 27 of 36 trials drifted and no agent said so; with the charter and the rule as it ships now, 12 drifted, and agents flagged the line 17 times and stopped 11 times. The claim holds, so **the remaining skills are worth writing**, with three consequences:
-
-- **The first rule had a back door**: 21 of 36 agents rewrote the charter to fit their change. The rule now says only the user changes a charter, and no agent edited it.
-- **`edd` must check the diff against the charter as it was before the change**, never the one in the working tree: an agent that moved a line can rewrite the charter in the same diff.
-- **The drift left is the kind the agent does not see as a move**: input cleaned by code before the model reads it, a parsing rule that also catches a free field, a missing field defaulted instead of refused. That is the diff check's job in `edd`, and the examples the rule or the `charter` skill could name.
+Session 1 (`trials/results.md`) showed the charter and the rule change what a coding agent does, so the remaining skills are worth writing. What it asked of `edd` is planned in session 3; the `charter` skill could also name the drift agents do not see as a move (input cleaned by code before the model reads it, a parsing rule that also catches a free field, a missing field defaulted instead of refused).
 
 Still to check outside that session: load the plugin in a session (`claude --plugin-dir <repo>/a4a`) and see the skills appear. Only the manifests have been validated so far.
 
@@ -22,12 +18,9 @@ After session 1, the held-out check: a real project with seams in cascade, repla
 
 ## Writing, after the test
 
-- **`edd`**: remove the references to external skills, replace the one-way rule ("a model seam becomes code only when an eval shows...") with the symmetric one, rename "model seam" to "stochastic seam", move cases and graders out to `eval`, replace smoke and full runs with the core and extended sets, replace the baseline with best results per model (fail below the target, warn below the best result), check the diff against the charter before accepting a change, and say it runs only when a stochastic seam changes. The scripts change with it.
-- **`edd`, the way out of a seam its model cannot hold**: when the runs stay below the target with the charter intact and the seam's budget is spent, `edd` stops and says so. It is the budget that ends the loop: on code the coding agent regulates itself, but every eval run costs. `edd` then puts the ways out to the user and takes none itself: another model (best results are kept per model, so the report shows whether one clears the target), the line moved on purpose (a charter change, the eval run on both versions, an ADR), a lower target, or the failure accepted. A model change is recommended with its evidence: what was tried on the model's side and how it failed.
-- **`setup`, one more line in the `AGENTS.md` rule**: if the request cannot be met without moving a line of the charter, stop and say so.
 - **`eval`**: to write. Cases, graders, judge calibration, the core and extended sets, the dev and held-out splits. Finished only when the cases cover every line of the charter and each grader has been seen to fail an output.
 - **`setup`**: does not yet copy the eval scripts or create `evals/`.
-- **`a4a/README.md`**: still describes the old `edd`; lines about wiring and install mention the former `dd` plugin. The root `README.md` is two lines.
+- **The root `README.md`** is two lines.
 
 ## The `charter` skill, first use (ticket 3)
 

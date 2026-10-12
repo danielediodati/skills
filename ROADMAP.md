@@ -26,3 +26,15 @@ Session 1's first trials mostly dictated the fix; on eight requests that only de
 10. **Calibrate the two judges.** Fifteen trials, condition and model hidden - [ticket](docs/work/2-silent-drift/issues/10-calibration.md)
 11. **The result, and the number in the README.** Per model, as the protocol's rule gives it - [ticket](docs/work/2-silent-drift/issues/11-results.md)
 
+## Session 3 - `0.3.0` - `edd` on one seam, holding the target and the money
+
+**Shows**: a real `edd` run on `triage_ticket`: the spending budget agreed first, the core set before the extended, every approval with its running total, and the verdict against the target and the best result.
+
+`edd` still describes the plugin before session 1: model seams, a one-way rule, smoke and full runs, a baseline. This session rewrites it on `CONTEXT.md` and adds decision 14 on spending.
+
+1. **`edd` speaks the plugin's language.** Stochastic seams, the symmetric rule, no external skills - [ticket](docs/work/3-edd/issues/01-edd-vocabulary.md)
+2. **Core and extended sets.** With the eval set named in the environment - [ticket](docs/work/3-edd/issues/02-core-extended.md)
+3. **Best results per model.** Fail below the target, warn below the best result - [ticket](docs/work/3-edd/issues/03-best-results.md)
+4. **The diff against the charter as it was.** Before a change is accepted - [ticket](docs/work/3-edd/issues/04-diff-check.md)
+5. **Nothing paid without approval.** Budget first, running total always shown - [ticket](docs/work/3-edd/issues/05-spending.md)
+6. **Demo on `triage_ticket`.** A real run, $2 - [ticket](docs/work/3-edd/issues/06-demo.md)
