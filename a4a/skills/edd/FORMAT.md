@@ -55,7 +55,11 @@ One output you labelled yourself per line, `human` aligned with `rubric`:
 
 ## `evals/<seam>/runs/<run-id>.json`
 
-Written by the runner, never edited: the run's settings (eval set, split, `k`, model, provider, commit), the hashes of the eval set and `grader.py`, whether the run is the `core` set or the `extended` set, the per-run scores, and for every case its `k` outcomes, its majority result, its cost and any errors. A run whose core set passes writes two files: the core run, then the extended run, which reuses the core results instead of paying for them again. `runs/baseline-<split>.txt` holds the id of the current baseline run for each split.
+Written by the runner, never edited: the run's settings (eval set, split, `k`, model, provider, commit), the hashes of the eval set and `grader.py`, whether the run is the `core` set or the `extended` set, the per-run scores, and for every case its `k` outcomes, its majority result, its cost and any errors. A run whose core set passes writes two files: the core run, then the extended run, which reuses the core results instead of paying for them again.
+
+## `evals/<seam>/best.json`
+
+Written by the runner, never edited: for each split, the best result of each model on the extended set, with its per-run scores, the run it came from and the code version it was measured on. It also holds the eval set and the hashes of the eval set and `grader.py` the results were measured with: when either hash changes, the runner discards every best result (the measure changed) and says so. A change to the code keeps them, reported as measured on an earlier version.
 
 ## `evals/log.md`
 
@@ -64,11 +68,11 @@ One row per run, newest last, appended by the runner:
 | date | commit | seam | eval set | model | provider | split | set | k | score | spread | gains/losses | cost/case | notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2026-10-02 | a1b2c3d | planner | cases.jsonl | qwen3.5:9b | ollama | dev | core | 3 | 0.83 | 0.80 to 0.90 | - | 2.0k tok, 13.1 s | - |
-| 2026-10-02 | a1b2c3d | planner | cases.jsonl | qwen3.5:9b | ollama | dev | extended | 3 | 0.71 | 0.67 to 0.75 | - | 2.1k tok, 14.0 s | first baseline; promoted |
+| 2026-10-02 | a1b2c3d | planner | cases.jsonl | qwen3.5:9b | ollama | dev | extended | 3 | 0.71 | 0.67 to 0.75 | - | 2.1k tok, 14.0 s | - |
 | 2026-10-03 | e4f5a6b+dirty | planner | cases.jsonl | qwen3.5:9b | ollama | dev | core | 3 | 0.60 | 0.50 to 0.70 | - | 2.3k tok, 15.2 s | tool descriptions rewritten |
 
 - `eval set`: the file named by `EVAL_SET`.
-- `set`: `core` or `extended` for a run; `promote` when `--promote-last` makes the latest extended run the baseline; `calibration` for a judge calibration. A `core` row with no `extended` row after it is a change rejected on the core set.
+- `set`: `core` or `extended`; `calibration` for a judge calibration. A `core` row with no `extended` row after it is a change rejected on the core set.
 - `score` and `spread`: defined in SKILL.md, Noise floor.
-- `gains/losses`: paired against the baseline run, with the one-sided sign-test p-value.
-- `notes`: the one change under test from `--note`, the losses listed by id (promoting the run accepts them), `promoted` when a run became the baseline as it ran, and `provisional` (pass it as `--note` with `--promote-last`) when you keep a gain with p above 0.05.
+- `gains/losses`: paired against the run that holds this model's best result, with the one-sided sign-test p-value.
+- `notes`: the one change under test from `--note`, the losses listed by id (keeping the change accepts them), and `best results discarded` when the grader or the eval set changed.

@@ -7,16 +7,21 @@ Copy into <project>/evals/ next to judge.py and calibrate.py. Layout, relative t
     <seam>/system.py     run(case_input) -> {"output": ..., "tokens"?: int, "seconds"?: float}
                          optional constants MODEL and PROVIDER
     <seam>/grader.py     grade(case, result) -> bool, or float in [0, 1] passing at >= 0.5
-    <seam>/runs/         written here: one JSON per run, plus baseline-<split>.txt
+    <seam>/runs/         written here: one JSON per run
+    <seam>/best.json     written here: the best result of each model on each split
     log.md               written here: one row per run
 
 A run goes in the order of decision 11: the core set first, then the extended set (every case of
 the split) only if the core set reaches the target. A change that fails the core set is rejected
 without a call spent on the rest.
 
+The extended run is judged as decisions 12 and 13 say. Below the target: failure, the only one.
+Below this model's best result by more than the run-to-run spread: a warning. Best results are
+kept per model with the code version they were measured on; a change to the grader or the eval
+set discards them, a change to the code keeps them, marked as measured on an earlier version.
+
 Examples:
     EVAL_SET=cases.jsonl python evals/run_evals.py planner --target 0.80 --note "tool descriptions rewritten"
-    EVAL_SET=cases.jsonl python evals/run_evals.py planner --promote-last   # keep the change just measured
     EVAL_SET=cases.jsonl python evals/run_evals.py planner --split heldout --target 0.80
 """
 
@@ -59,7 +64,7 @@ def load_module(path: Path, name: str):
 
 
 def file_hash(path: Path) -> str:
-    """Short content hash, used to detect a grader or eval set changed since the baseline."""
+    """Short content hash, used to detect a grader or eval set changed since the best results."""
     return hashlib.sha256(path.read_bytes()).hexdigest()[:12] if path.exists() else "-"
 
 
@@ -87,7 +92,8 @@ def git_commit(root: Path) -> str:
         if evals_rel is None:
             return False
         prefix = "" if evals_rel == "." else f"{evals_rel}/"
-        return path == f"{prefix}log.md" or (path.startswith(prefix) and "/runs/" in f"/{path}")
+        return path == f"{prefix}log.md" or (path.startswith(prefix) and (
+            "/runs/" in f"/{path}" or path.endswith("/best.json")))
 
     dirty = any(not is_eval_output(line) for line in status if line.strip())
     return sha + ("+dirty" if dirty else "")
@@ -185,18 +191,39 @@ def sign_test(gains: int, losses: int) -> float:
     return sum(math.comb(n, i) for i in range(gains, n + 1)) / 2 ** n
 
 
-def read_baseline(runs_dir: Path, split: str, wanted: str | None) -> dict | None:
-    """The run named by --baseline, else the promoted baseline for this split, else None."""
-    run_id = wanted
-    marker = runs_dir / f"baseline-{split}.txt"
-    if run_id is None and marker.exists():
-        run_id = marker.read_text(encoding="utf-8").strip()
-    if run_id is None:
-        return None
-    path = runs_dir / f"{run_id}.json"
+def load_best(seam_dir: Path, settings: dict) -> tuple[dict, str | None]:
+    """The seam's best results, emptied when the grader or the eval set changed (decision 13)."""
+    path = seam_dir / "best.json"
+    fresh = {"eval_set": settings["eval_set"], "cases_hash": settings["cases_hash"],
+             "grader_hash": settings["grader_hash"], "splits": {}}
     if not path.exists():
-        sys.exit(f"baseline run {run_id} not found in {runs_dir}")
-    return json.loads(path.read_text(encoding="utf-8"))
+        return fresh, None
+    best = json.loads(path.read_text(encoding="utf-8"))
+    changed = [what for what, key in (("the grader", "grader_hash"), ("the eval set", "cases_hash"))
+               if best[key] != settings[key]]
+    if changed:
+        return fresh, (f"{' and '.join(changed)} changed: best results discarded, "
+                       f"the measure changed so earlier scores do not compare")
+    return best, None
+
+
+def verdict(score: float, per_run: list[float], target: float, best: dict | None) -> list[str]:
+    """Decision 12: the target decides, the best result informs."""
+    lines = [f"target {target:.2f}: {'met' if score >= target else 'not met: failure'}"]
+    if best is None:
+        return lines
+    gap = best["score"] - score
+    noise = max(max(per_run) - min(per_run), max(best["per_run"]) - min(best["per_run"]))
+    if score >= target and gap > noise + 1e-9:
+        lines.append(f"WARNING below the best result by {gap:.2f}, more than the run-to-run spread "
+                     f"({noise:.2f}); not a failure, the target decides")
+    return lines
+
+
+def fmt_best(model: str, entry: dict, commit: str) -> str:
+    """One best result, marked when it was measured on another version of the code."""
+    aged = "" if entry["code"] == commit else f", an earlier version: {commit} now"
+    return f"{model} {entry['score']:.2f} (spread {spread(entry['per_run'])}; {entry['run_id']}, code {entry['code']}{aged})"
 
 
 def fmt_cost(results: list[dict]) -> str:
@@ -211,22 +238,6 @@ def fmt_cost(results: list[dict]) -> str:
     return ", ".join(parts) or "-"
 
 
-def promote_last(root: Path, seam: str, split: str, note: str) -> int:
-    """Keep the change just measured: mark the latest extended run of the split as its baseline."""
-    runs_dir = root / seam / "runs"
-    runs = [json.loads(f.read_text(encoding="utf-8")) for f in sorted(runs_dir.glob("*.json"))]
-    runs = [r for r in runs if r["split"] == split and r["set"] == "extended"]
-    if not runs:
-        sys.exit(f"no extended {split} run to promote in {runs_dir}")
-    last = runs[-1]  # run ids start with a timestamp, so file order is time order
-    (runs_dir / f"baseline-{split}.txt").write_text(last["run_id"], encoding="utf-8")
-    append_log(root, [datetime.now().strftime("%Y-%m-%d"), last["commit"], seam, last["eval_set"],
-                      last["model"], last["provider"], split, "promote", last["k"], f"{last['score']:.2f}",
-                      "-", "-", "-", "; ".join(x for x in (f"promoted {last['run_id']}", note) if x)])
-    print(f"promoted {last['run_id']} (score {last['score']:.2f}) to baseline for {split}")
-    return 0
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run one seam's evals (edd skill).")
     parser.add_argument("seam", help="directory name under the evals root")
@@ -236,10 +247,6 @@ def main() -> int:
     parser.add_argument("--k", type=int, default=3, help="runs per case, odd")
     parser.add_argument("--workers", type=int, default=1, help="cases run in parallel (1 for local CPU models)")
     parser.add_argument("--note", default="", help="the one change under test")
-    parser.add_argument("--baseline", default=None, help="run id to compare against (default: promoted baseline)")
-    parser.add_argument("--promote", action="store_true", help="make this run the baseline for its split")
-    parser.add_argument("--promote-last", action="store_true",
-                        help="run nothing: make the latest extended run of this split the baseline")
     parser.add_argument("--model", default=None)
     parser.add_argument("--provider", default=None)
     parser.add_argument("--root", default=str(Path(__file__).resolve().parent), help="evals root directory")
@@ -250,8 +257,6 @@ def main() -> int:
     runs_dir = seam_dir / "runs"
     if args.k % 2 == 0:
         sys.exit("use an odd k, so a case's majority is never a tie")
-    if args.promote_last:
-        return promote_last(root, args.seam, args.split, args.note)
     eval_set = eval_set_path(seam_dir)
     if args.target is None:
         sys.exit("--target is required: the charter's target decides whether the extended set runs")
@@ -297,49 +302,45 @@ def main() -> int:
     if crashed:
         report.append(f"errors in: {', '.join(crashed)} (details in the run file)")
 
-    # Paired comparison against the baseline, over the cases both runs share.
+    # Judge against the target and this model's best result, paired case by case with its run.
     notes = [args.note] if args.note else []
     paired = "-"
-    baseline = read_baseline(runs_dir, args.split, args.baseline)
-    if baseline is None:
-        args.promote = True
-        notes.append("first baseline")
-        report.append("no baseline for this split yet; this run becomes it")
-    else:
-        before = {r["id"]: r["passed"] for r in baseline["results"]}
+    best, discarded = load_best(seam_dir, settings)
+    if discarded:
+        report.append(discarded)
+        notes.append("best results discarded")
+    of_split = best["splits"].setdefault(args.split, {})
+    mine = of_split.get(model)
+    for other, entry in sorted(of_split.items()):
+        report.append(("best result: " if other == model else "best result of another model: ")
+                      + fmt_best(other, entry, commit))
+    if mine is None:
+        report.append(f"no best result for {model} on {args.split} yet")
+    elif (runs_dir / f"{mine['run_id']}.json").exists():
+        before_run = json.loads((runs_dir / f"{mine['run_id']}.json").read_text(encoding="utf-8"))
+        before = {r["id"]: r["passed"] for r in before_run["results"]}
         common = [r for r in results if r["id"] in before]
         gains = [r["id"] for r in common if r["passed"] and not before[r["id"]]]
         losses = [r["id"] for r in common if not r["passed"] and before[r["id"]]]
         p = sign_test(len(gains), len(losses))
         paired = f"+{len(gains)}/-{len(losses)} (p={p:.2f})"
-        report.append(f"vs baseline {baseline['run_id']}: {paired} over {len(common)} shared cases")
+        report.append(f"vs best result {mine['run_id']}: {paired} over {len(common)} cases")
         if gains:
             report.append(f"  gains: {', '.join(gains)}")
         if losses:
             report.append(f"  losses: {', '.join(losses)} (keeping this change accepts them)")
             notes.append(f"losses: {', '.join(losses)}")
-        if baseline["grader_hash"] != settings["grader_hash"]:
-            report.append("WARNING grader.py changed since the baseline: run the unchanged system with the "
-                          "new grader and promote that run before testing a system change (moving goalposts)")
-        if baseline["cases_hash"] != settings["cases_hash"]:
-            report.append(f"note: the eval set changed since the baseline; paired comparison uses the "
-                          f"{len(common)} shared cases")
-        beyond = score > max(baseline["per_run"])
-        report.append(f"beyond noise: {'yes' if beyond else 'no'} "
-                      f"({score:.2f} vs baseline max {max(baseline['per_run']):.2f})")
+    report.extend(verdict(score, per_run, args.target, mine))
 
-    met = score >= args.target
-    report.append(f"target {args.target:.2f}: {'met' if met else 'not met'}")
-    if args.promote:
-        notes.append("promoted")
     run_id = save_run(root, runs_dir, settings, "extended", results, score, per_run, "; ".join(notes),
                       paired=paired)
-    if args.promote:
-        (runs_dir / f"baseline-{args.split}.txt").write_text(run_id, encoding="utf-8")
-        report.append(f"promoted {run_id} to baseline for {args.split}")
+    if mine is None or score > mine["score"]:
+        of_split[model] = {"score": score, "per_run": per_run, "code": commit, "run_id": run_id}
+        report.append(f"new best result for {model} on {args.split}")
+    (seam_dir / "best.json").write_text(json.dumps(best, indent=1), encoding="utf-8")
     report.append(f"run saved: {runs_dir / (run_id + '.json')}")
     emit(report)
-    return 0 if met else 1
+    return 0 if score >= args.target else 1
 
 
 def spread(per_run: list[float]) -> str:

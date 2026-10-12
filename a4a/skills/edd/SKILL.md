@@ -26,7 +26,7 @@ The charter splits the seam's decisions between the model (freedom) and code (co
 
 1. **One change.** A prompt, a tool description, the model, the code around the call, a sampling parameter, a retrieval setting. Two changes in one run cannot be attributed.
 2. **Core set, then extended set.** `EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --target <charter's target> --note "<the change>"`. The core set (the cases marked `core`) runs first; a change whose core score is below the target is rejected without a call spent on the rest. The extended set, every case of the split, runs only after the core passes, and only it can accept a change. The eval set is named in the environment, never by a path in the code.
-3. **Verdict.** Below the charter's target: failure, the only one. Below this model's best result by more than the run-to-run spread, at or above the target: a warning in the report, not a failure. The best result informs; the target decides.
+3. **Verdict.** Below the charter's target: failure, the only one. Below this model's best result by more than the run-to-run spread (the wider of the two runs' spreads), at or above the target: a warning in the report, not a failure, because the highest score is partly a lucky run. The best result informs; the target decides. Best results are kept per model, each with the code version it was measured on: a change to the grader or the eval set discards them all, a change to the code keeps them, reported as measured on an earlier version.
 4. **Read the losses.** The runner lists by case id the cases the change turned from pass to fail. Keeping the change accepts them; say so to the user.
 5. **Read failures.** Read the failing outputs and tag each with a failure category in the case's `tags`. The categories, not the score, choose the next change.
 6. **Commit** with the score in the message. The runner has already logged the run.
@@ -62,6 +62,7 @@ Derive each seam's categories from its first failures and keep them few (3 to 7)
 - `evals/<seam>/cases.jsonl`, `system.py`, `grader.py`: the eval set, the adapter that runs one case through the seam, the grader. Formats in [FORMAT.md](FORMAT.md).
 - `evals/<seam>/calibration.jsonl`: labels for calibrating a model judge ([GRADERS.md](GRADERS.md)).
 - `evals/<seam>/runs/`: one file per run, written by the runner.
+- `evals/<seam>/best.json`: the best result of each model, written by the runner.
 - `evals/log.md`: one row per run, written by the runner.
 
 If the project has no eval runner, copy the three files in [scripts/](scripts/) into `evals/`; do not write a new runner. They need only the Python standard library: `run_evals.py` runs a seam, `judge.py` is the model judge for any OpenAI-compatible endpoint, `calibrate.py` calibrates it. If the project already uses an eval framework (Inspect, promptfoo, LangSmith), keep it and its formats; every rule above still applies.

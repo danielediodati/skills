@@ -16,8 +16,11 @@ from pathlib import Path
 RUNNER = Path(__file__).resolve().parents[1] / "a4a" / "skills" / "edd" / "scripts" / "run_evals.py"
 
 # The fake seam: each case says, run by run, whether its output passes, and what a call costs.
+# FAKE_OUTCOMES in the environment overrides a case's outcomes, so the seam can get worse while the
+# eval set stays the same.
 # Every call is appended to calls.txt, so a test sees which cases were paid for.
 SYSTEM = '''
+import json, os
 from pathlib import Path
 MODEL = "fake-model"
 PROVIDER = "fake"
@@ -28,7 +31,7 @@ def run(case_input):
     n = seen.count(case_input["id"])
     with CALLS.open("a") as f:
         f.write(case_input["id"] + "\\n")
-    outcomes = case_input["outcomes"]
+    outcomes = json.loads(os.environ.get("FAKE_OUTCOMES", "{}")).get(case_input["id"], case_input["outcomes"])
     return {"output": outcomes[n % len(outcomes)], "cost": case_input.get("cost", 0.0)}
 '''
 
@@ -58,10 +61,13 @@ class FakeEvals:
     def write_cases(self, cases: list[dict], name: str = "cases.jsonl") -> None:
         (self.seam / name).write_text("".join(json.dumps(c) + "\n" for c in cases), encoding="utf-8")
 
-    def run(self, *args: str, eval_set: str | None = "cases.jsonl") -> subprocess.CompletedProcess:
-        env = {k: v for k, v in os.environ.items() if k != "EVAL_SET"}
+    def run(self, *args: str, eval_set: str | None = "cases.jsonl",
+            outcomes: dict | None = None) -> subprocess.CompletedProcess:
+        env = {k: v for k, v in os.environ.items() if k not in ("EVAL_SET", "FAKE_OUTCOMES")}
         if eval_set is not None:
             env["EVAL_SET"] = eval_set
+        if outcomes:
+            env["FAKE_OUTCOMES"] = json.dumps(outcomes)
         return subprocess.run([sys.executable, str(RUNNER), *args, "--root", str(self.root)],
                               capture_output=True, text=True, env=env, cwd=self.root)
 
@@ -115,6 +121,65 @@ class CoreThenExtended(unittest.TestCase):
         done = evals.run("fake", "--target", "0.5", "--k", "1")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(evals.calls(), ["core-1"])
+
+
+def ten_cases() -> list[dict]:
+    """Ten core cases. c0 fails its second run, so the first run of the seam scores 0.97 with spread 0.10."""
+    return [case("c0", [True, False, True], core=True)] + [case(f"c{i}", [True], core=True) for i in range(1, 10)]
+
+
+class TargetAndBestResult(unittest.TestCase):
+    def setUp(self):
+        self.evals = FakeEvals(ten_cases())
+        self.addCleanup(self.evals.close)
+        first = self.evals.run("fake", "--target", "0.5")
+        self.assertEqual(first.returncode, 0, first.stderr)
+
+    def test_below_the_target_fails(self):
+        done = self.evals.run("fake", "--target", "0.95", outcomes={"c1": [False]})
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn("not met", done.stdout)
+
+    def test_below_the_best_result_within_the_spread_passes_with_no_warning(self):
+        done = self.evals.run("fake", "--target", "0.5", outcomes={"c1": [True, True, False]})
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertNotIn("WARNING", done.stdout)
+
+    def test_below_the_best_result_beyond_the_spread_passes_with_a_warning(self):
+        done = self.evals.run("fake", "--target", "0.5", outcomes={"c1": [False], "c2": [False], "c3": [False]})
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("WARNING below the best result", done.stdout)
+
+    def test_a_grader_change_empties_the_best_results(self):
+        with (self.evals.seam / "grader.py").open("a", encoding="utf-8") as f:
+            f.write("# stricter, one day\n")
+        done = self.evals.run("fake", "--target", "0.5", outcomes={"c1": [False], "c2": [False], "c3": [False]})
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("best results discarded", done.stdout)
+        self.assertNotIn("WARNING", done.stdout)
+
+    def test_an_eval_set_change_empties_the_best_results(self):
+        self.evals.write_cases(ten_cases() + [case("c10", [True])])
+        done = self.evals.run("fake", "--target", "0.5", outcomes={"c1": [False], "c2": [False], "c3": [False]})
+        self.assertIn("best results discarded", done.stdout)
+        self.assertNotIn("WARNING", done.stdout)
+
+
+class CodeVersion(unittest.TestCase):
+    def test_a_code_change_keeps_the_best_result_marked_as_measured_on_an_earlier_version(self):
+        evals = FakeEvals(ten_cases())
+        self.addCleanup(evals.close)
+        self.assertEqual(evals.run("fake", "--target", "0.5").returncode, 0)
+        first = evals.run("fake", "--target", "0.5")
+        self.assertNotIn("earlier version", first.stdout)
+        # The best result as if measured on a commit before this one.
+        best_path = evals.seam / "best.json"
+        best = json.loads(best_path.read_text(encoding="utf-8"))
+        best["splits"]["dev"]["fake-model"]["code"] = "0a1b2c3"
+        best_path.write_text(json.dumps(best), encoding="utf-8")
+        done = evals.run("fake", "--target", "0.5", outcomes={"c1": [False], "c2": [False], "c3": [False]})
+        self.assertIn("earlier version", done.stdout)
+        self.assertIn("WARNING below the best result", done.stdout)
 
 
 if __name__ == "__main__":
