@@ -46,9 +46,27 @@ The charter splits the seam's decisions between the model (freedom) and code (co
 1. **One change.** A prompt, a tool description, the model, the code around the call, a sampling parameter, a retrieval setting. Two changes in one run cannot be attributed.
 2. **Core set, then extended set.** `EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --target <charter's target> --note "<the change>"`. The core set (the cases marked `core`) runs first; a change whose core score is below the target is rejected without a call spent on the rest. The extended set, every case of the split, runs only after the core passes, and only it can accept a change. The eval set is named in the environment, never by a path in the code.
 3. **Verdict.** Below the charter's target: failure, the only one. Below this model's best result by more than the run-to-run spread (the wider of the two runs' spreads), at or above the target: a warning in the report, not a failure, because the highest score is partly a lucky run. The best result informs; the target decides. Best results are kept per model, each with the code version it was measured on: a change to the grader or the eval set discards them all, a change to the code keeps them, reported as measured on an earlier version.
-4. **Read the losses.** The runner lists by case id the cases the change turned from pass to fail. Keeping the change accepts them; say so to the user.
-5. **Read failures.** Read the failing outputs and tag each with a failure category in the case's `tags`. The categories, not the score, choose the next change.
-6. **Commit** with the score in the message. The runner has already logged the run.
+4. **Check the diff against the charter as it was** (next section). It runs whatever the score, and a moved line stops the change.
+5. **Read the losses.** The runner lists by case id the cases the change turned from pass to fail. Keeping the change accepts them; say so to the user.
+6. **Read failures.** Read the failing outputs and tag each with a failure category in the case's `tags`. The categories, not the score, choose the next change.
+7. **Commit** with the score in the message. The runner has already logged the run.
+
+## The diff against the charter
+
+Before a change is accepted, read its diff against the seam's charter **as it was before the change**: `git show <base>:evals/<seam>/charter.md`, where `<base>` is the commit the change started from. Never the charter in the working tree: a change that moved a line can rewrite the charter in the same diff. A diff that edits the charter is itself a finding: only the user changes a charter.
+
+For each hunk that touches the seam (the prompt, the code that builds the model's input, the code that reads its answer, the constants and defaults around them):
+
+1. **Name the decision** the hunk touches, and find its line in the charter.
+2. **A free line now taken by code** is drift: a constant or a default in place of the model's choice (substitution), a closed menu the model picks from in place of its own answer (templating), or a prompt that dictates the answer. A criterion in the prompt that the model still applies by reading each input (a definition, a requirement the user stated) informs its judgement and is not a move.
+3. **A constrained line now left to the model** is drift the other way (over-delegation): the model does arithmetic code owned, may invent a value that had to come from a list, or a check is loosened.
+4. **Look for the three moves agents do not see as moves**, each found in session 1 trials where the agent changed the code without flagging a line:
+   - **Input cleaned by code before the model reads it**: quoted text stripped, fields dropped, text normalised. The model no longer decides about what it cannot see, so a free line moved toward code even though the prompt is untouched.
+   - **A parsing rule that also catches a free field**: a check written for one field rejects or rewrites another field the model owns.
+   - **A missing field defaulted instead of refused**: a constraint that says "refuse" or "raise" now lets a value nobody decided through.
+5. **Report each move**: the charter line, the hunk that moves it, and the direction (toward code, toward the model). A hunk that brings the code back to what the charter says is not a move; say so. A change that moves no line says so in one line.
+
+A moved line stops the change, whatever the score: name the line, say what moving it would buy, and leave the decision to the user. A score cannot clear this check: it measures whether the output is good, not who took the decision, so a free decision turned into a constant can raise the score and still be drift.
 
 ## Noise floor
 
