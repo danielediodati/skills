@@ -1,0 +1,195 @@
+--- a/seam.py
++++ b/seam.py
+@@ -7,10 +7,15 @@
+ 
+ CENT = Decimal("0.01")
+ 
++MONTHS = ["jan", "feb", "mar", "apr", "may", "jun",
++          "jul", "aug", "sep", "oct", "nov", "dec"]
++
+ PROMPT = """Extract the invoice below as a JSON object with these keys:
+ "supplier" (string), "invoice_number" (string), "issue_date" (YYYY-MM-DD),
+-"currency" (three-letter code), "lines" (a list of objects with "description",
+-"quantity" and "unit_price") and "total" (the amount due).
++"issue_date_as_printed" (the issue date copied character for character as it
++appears on the invoice, without reformatting), "currency" (three-letter code),
++"lines" (a list of objects with "description", "quantity" and "unit_price")
++and "total" (the amount due).
+ Answer with the JSON object only.
+ 
+ Invoice:
+@@ -22,22 +27,26 @@
+     """The invoice could not be read into a usable record."""
+ 
+ 
+-def extract_invoice(text, model):
++def extract_invoice(text, model, date_order=None):
+     """Return the invoice in `text` as a dict, with the total checked against the lines.
+ 
+     `model` is a callable taking a prompt string and returning a string.
++
++    `date_order` is "DMY" or "MDY": how the supplier writes all-numeric dates
++    such as 05/08/2026. Without it, such a date is read only when it can mean
++    one day; otherwise `issue_date` is None, `issue_date_candidates` lists the
++    possible dates and `status` is "date_ambiguous" (unless the totals
++    mismatch, which takes precedence). The date is never guessed.
+     """
++    if date_order not in (None, "DMY", "MDY"):
++        raise ValueError("date_order must be 'DMY', 'MDY' or None")
+     if not text.strip():
+         raise InvoiceError("empty invoice text")
+     data = _load_json(model(PROMPT.format(text=text)))
+ 
+     supplier = _text(data, "supplier")
+     invoice_number = _text(data, "invoice_number")
+-    raw_date = _text(data, "issue_date")
+-    try:
+-        issue_date = date.fromisoformat(raw_date)
+-    except ValueError:
+-        raise InvoiceError(f"issue_date is not a date: {raw_date!r}") from None
++    issue_date, date_candidates = _issue_date(data, text, date_order)
+     currency = _text(data, "currency").upper()
+     if not re.fullmatch(r"[A-Z]{3}", currency):
+         raise InvoiceError(f"currency is not a three-letter code: {currency!r}")
+@@ -60,16 +69,76 @@
+ 
+     total = _cents(_number(data.get("total"), "total"))
+     lines_total = sum((line["amount"] for line in lines), Decimal("0"))
++    if lines_total != total:
++        status = "mismatch"
++    elif issue_date is None:
++        status = "date_ambiguous"
++    else:
++        status = "ok"
+     return {
+         "supplier": supplier,
+         "invoice_number": invoice_number,
+         "issue_date": issue_date,
++        "issue_date_candidates": date_candidates,
+         "currency": currency,
+         "lines": lines,
+         "lines_total": lines_total,
+         "total": total,
+-        "status": "ok" if lines_total == total else "mismatch",
++        "status": status,
+     }
++
++
++def _issue_date(data, text, date_order):
++    """Return (date or None, candidate dates), reading the date as printed.
++
++    The model's own YYYY-MM-DD is not trusted: it has already chosen a
++    day/month order, so the printed string is parsed here instead.
++    """
++    printed = _text(data, "issue_date_as_printed")
++    if " ".join(printed.split()) not in " ".join(text.split()):
++        raise InvoiceError(f"issue_date_as_printed is not in the invoice: {printed!r}")
++
++    numeric = re.fullmatch(r"(\d{1,4})([/.\-])(\d{1,2})\2(\d{1,4})", printed)
++    if numeric:
++        first, sep, second, third = numeric.groups()
++        if len(first) == 4:  # year first (ISO style): no ambiguity
++            triples = [(first, second, third)]
++        else:
++            if sep == "." and date_order is None:
++                date_order = "DMY"  # dotted dates are day-first by convention
++            pairs = {"DMY": [(first, second)], "MDY": [(second, first)],
++                     None: [(first, second), (second, first)]}[date_order]
++            triples = [(third, month, day) for day, month in pairs]
++        found = set()
++        for year, month, day in triples:
++            year = int(year) + (2000 if len(year) <= 2 else 0)
++            try:
++                found.add(date(year, int(month), int(day)))
++            except ValueError:
++                pass
++        found = sorted(found)
++    else:
++        found = _named_month_date(printed)
++    if not found:
++        raise InvoiceError(f"issue_date is not a date: {printed!r}")
++    return (found[0] if len(found) == 1 else None), found
++
++
++def _named_month_date(printed):
++    """Read dates like '2 Oct 2026' or 'October 2, 2026'; month names are unambiguous."""
++    lowered = printed.lower()
++    month = next((i for i, name in enumerate(MONTHS, 1)
++                  if re.search(rf"(?<![a-z]){name}", lowered)), None)
++    numbers = re.findall(r"\d+", printed)
++    if month is None or len(numbers) != 2:
++        return []
++    day, year = (int(n) for n in sorted(numbers, key=len))
++    if year < 100:
++        year += 2000
++    try:
++        return [date(year, month, day)]
++    except ValueError:
++        return []
+ 
+ 
+ def _load_json(answer):
+--- a/test.py
++++ b/test.py
+@@ -11,6 +11,7 @@
+     "supplier": "Brightwell Paper Ltd",
+     "invoice_number": "BP-2291",
+     "issue_date": "2026-10-02",
++    "issue_date_as_printed": "2 Oct 2026",
+     "currency": "eur",
+     "lines": [
+         {"description": "A4 paper, box", "quantity": 12, "unit_price": 24.5},
+@@ -32,6 +33,11 @@
+ 
+ def extract(**changes):
+     return extract_invoice(INVOICE_TEXT, FakeModel(json.dumps({**ANSWER, **changes})))
++
++
++def extract_dated(text, printed, date_order=None, **changes):
++    answer = {**ANSWER, "issue_date_as_printed": printed, **changes}
++    return extract_invoice(text, FakeModel(json.dumps(answer)), date_order=date_order)
+ 
+ 
+ class ExtractInvoiceTest(unittest.TestCase):
+@@ -86,7 +92,40 @@
+ 
+     def test_unreadable_date_is_an_error(self):
+         with self.assertRaisesRegex(InvoiceError, "issue_date is not a date"):
+-            extract(issue_date="2nd October")
++            extract_dated("Invoice dated soon", "soon")
++
++    def test_unambiguous_numeric_date_is_read_as_printed(self):
++        result = extract_dated("Dated 25/08/2026", "25/08/2026", issue_date="2026-08-25")
++        self.assertEqual(result["issue_date"], date(2026, 8, 25))
++        self.assertEqual(result["status"], "ok")
++
++    def test_ambiguous_date_is_not_guessed(self):
++        result = extract_dated("Dated 05/08/2026", "05/08/2026", issue_date="2026-05-08")
++        self.assertIsNone(result["issue_date"])
++        self.assertEqual(result["issue_date_candidates"],
++                         [date(2026, 5, 8), date(2026, 8, 5)])
++        self.assertEqual(result["status"], "date_ambiguous")
++
++    def test_date_order_resolves_ambiguity(self):
++        uk = extract_dated("Dated 05/08/2026", "05/08/2026", date_order="DMY",
++                           issue_date="2026-05-08")
++        self.assertEqual(uk["issue_date"], date(2026, 8, 5))
++        self.assertEqual(uk["status"], "ok")
++        us = extract_dated("Dated 03/04/2026", "03/04/2026", date_order="MDY")
++        self.assertEqual(us["issue_date"], date(2026, 3, 4))
++
++    def test_same_day_and_month_is_not_ambiguous(self):
++        result = extract_dated("Dated 05/05/2026", "05/05/2026")
++        self.assertEqual(result["issue_date"], date(2026, 5, 5))
++
++    def test_date_not_on_the_invoice_is_an_error(self):
++        with self.assertRaisesRegex(InvoiceError, "not in the invoice"):
++            extract_dated("Dated 2 Oct 2026", "05/08/2026")
++
++    def test_mismatch_takes_precedence_over_ambiguous_date(self):
++        result = extract_dated("Dated 05/08/2026", "05/08/2026", total=1)
++        self.assertEqual(result["status"], "mismatch")
++        self.assertIsNone(result["issue_date"])
+ 
+     def test_bad_currency_is_an_error(self):
+         with self.assertRaisesRegex(InvoiceError, "currency"):

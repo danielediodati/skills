@@ -1,0 +1,68 @@
+--- a/README.md
++++ b/README.md
+@@ -7,9 +7,9 @@
+ The function returns a dict with:
+ 
+ - `queue`: one of `billing`, `technical`, `account`, `shipping`, `general`
+-- `urgency`: one of `low`, `normal`, `high`, `urgent`; enterprise customers are raised one level
++- `urgency`: one of `low`, `normal`, `high`, `urgent`, as the model judges the ticket; the customer's tier never changes it
+ - `summary`: a single line of at most 120 characters, shown in the agents' ticket list
+-- `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
++- `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency. Enterprise customers get a faster deadline at the same urgency: 24, 8, 4 or 1. Only `urgent` is ever answered within 1 hour
+ 
+ Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -5,6 +5,10 @@
+ QUEUES = ("billing", "technical", "account", "shipping", "general")
+ URGENCIES = ("low", "normal", "high", "urgent")
+ RESPOND_WITHIN_HOURS = {"low": 72, "normal": 24, "high": 8, "urgent": 1}
++# Enterprise contracts promise a faster answer. The deadline is tightened
++# without changing the urgency, so "urgent" (one hour, pages on call) keeps
++# meaning an outage whatever the customer's tier.
++ENTERPRISE_RESPOND_WITHIN_HOURS = {"low": 24, "normal": 8, "high": 4, "urgent": 1}
+ MAX_BODY_CHARS = 2000
+ MAX_SUMMARY_CHARS = 120
+ 
+@@ -44,17 +48,16 @@
+ 
+     queue = _choice(fields.get("queue"), QUEUES, "general")
+     urgency = _choice(fields.get("urgency"), URGENCIES, "normal")
++    deadlines = RESPOND_WITHIN_HOURS
+     if ticket.get("tier") == "enterprise":
+-        # Enterprise contracts promise a faster answer: one level up.
+-        level = min(URGENCIES.index(urgency) + 1, len(URGENCIES) - 1)
+-        urgency = URGENCIES[level]
++        deadlines = ENTERPRISE_RESPOND_WITHIN_HOURS
+ 
+     summary = " ".join(fields.get("summary", "").split()) or subject
+     return {
+         "queue": queue,
+         "urgency": urgency,
+         "summary": summary[:MAX_SUMMARY_CHARS],
+-        "respond_within_hours": RESPOND_WITHIN_HOURS[urgency],
++        "respond_within_hours": deadlines[urgency],
+     }
+ 
+ 
+--- a/test.py
++++ b/test.py
+@@ -67,10 +67,15 @@
+             "respond_within_hours": 24,
+         })
+ 
+-    def test_enterprise_is_raised_one_level(self):
++    def test_enterprise_keeps_urgency_but_gets_a_faster_deadline(self):
+         result = triage("queue: billing\nurgency: normal\nsummary: x", tier="enterprise")
++        self.assertEqual(result["urgency"], "normal")
++        self.assertEqual(result["respond_within_hours"], 8)
++
++    def test_enterprise_high_is_never_urgent(self):
++        result = triage("queue: billing\nurgency: high\nsummary: x", tier="enterprise")
+         self.assertEqual(result["urgency"], "high")
+-        self.assertEqual(result["respond_within_hours"], 8)
++        self.assertEqual(result["respond_within_hours"], 4)
+ 
+     def test_enterprise_urgent_stays_urgent(self):
+         result = triage("queue: billing\nurgency: urgent\nsummary: x", tier="enterprise")

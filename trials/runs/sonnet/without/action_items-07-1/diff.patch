@@ -1,0 +1,87 @@
+--- a/README.md
++++ b/README.md
+@@ -9,7 +9,7 @@
+ The model reads the notes and writes the items. The code decides what is kept:
+ 
+ - lines of the answer that are not `task | owner | due` are skipped;
+-- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
++- an owner who is an attendee is returned spelled as the caller gave it; an owner who was not in the meeting (say, a colleague the notes say will do the task) is kept, with `owner_absent=True`, as long as the notes mention that name; otherwise the item stays, with `owner` set to `None`. So `owner is None` means the notes really name nobody;
+ - a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -20,8 +20,10 @@
+ task | owner | due
+ 
+ - task: a short imperative sentence, e.g. "Send the revised quote to Halden".
+-- owner: the name of the person responsible, as written in the list above,
+-  or "none" if nobody took it.
++- owner: the name of the person responsible, as written in the list above.
++  If the notes say the task belongs to someone who was not in the meeting,
++  give that person's full name as written in the notes. Write "none" only
++  if the notes name nobody.
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
+ 
+ If there are no action items, write only: NONE
+@@ -37,8 +39,9 @@
+ @dataclass(frozen=True)
+ class ActionItem:
+     task: str
+-    owner: Optional[str]  # one of the attendees, spelled as the caller gave it
++    owner: Optional[str]  # an attendee as the caller spelled it, or a name from the notes
+     due: Optional[date]
++    owner_absent: bool = False  # the owner is named in the notes but was not in the meeting
+ 
+ 
+ def extract_action_items(
+@@ -65,6 +68,7 @@
+     answer = model(prompt)
+ 
+     by_name = {_key(name): name for name in attendees}
++    notes_key = _key(notes)
+     items: List[ActionItem] = []
+     seen = set()
+     for line in answer.splitlines():
+@@ -77,11 +81,15 @@
+         if not task or _key(task) == "task":  # empty, or the header echoed back
+             continue
+         owner = by_name.get(_key(fields[1]))
++        absent = False
++        name = " ".join(fields[1].split())
++        if owner is None and _key(name) not in _EMPTY and _key(name) in notes_key:
++            owner, absent = name, True
+         due = _parse_due(fields[2], meeting_date)
+         if (_key(task), owner) in seen:
+             continue
+         seen.add((_key(task), owner))
+-        items.append(ActionItem(task, owner, due))
++        items.append(ActionItem(task, owner, due, absent))
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+--- a/test.py
++++ b/test.py
+@@ -89,9 +89,21 @@
+         items = run("Book the room | tom  BECKER | none")
+         self.assertEqual(items[0].owner, "Tom Becker")
+ 
+-    def test_owner_who_was_not_in_the_meeting_is_dropped_but_item_kept(self):
++    def test_owner_not_in_meeting_and_not_in_notes_is_dropped_but_item_kept(self):
+         items = run("Approve the budget | Marta Olsen | none")
+         self.assertEqual(items, [ActionItem("Approve the budget", None, None)])
++
++    def test_absent_owner_named_in_the_notes_is_kept_and_flagged(self):
++        notes = (
++            "Marta Olsen from finance couldn't join. Ana spoke to her this "
++            "morning: Marta will approve the budget by 10 March."
++        )
++        items = run("Approve the budget | Marta Olsen | 2026-03-10", notes)
++        self.assertEqual(
++            items,
++            [ActionItem("Approve the budget", "Marta Olsen", date(2026, 3, 10), True)],
++        )
++        self.assertFalse(run("Book the room | Tom Becker | none")[0].owner_absent)
+ 
+     def test_explicit_none_owner(self):
+         self.assertIsNone(run("Find a caterer | none | none")[0].owner)

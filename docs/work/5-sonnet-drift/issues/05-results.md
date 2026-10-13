@@ -10,6 +10,8 @@ Blocked by: 04
 - `openpoints.md`: what the result means for the plugin's claim, for the `charter` skill and for `edd`.
 - The 24 `without` trials on `04` and `05` are reused from session 3 and ran on 2026-10-11; their `drafted` counterparts ran on 2026-10-13. The results say so.
 - The 24 trials on `06` ran on 2026-10-13, the two conditions side by side.
+- The 24 trials on `07` ran on 2026-10-13, the two conditions side by side.
+- Three verdicts on `action_items-07` came back with no row for F4 and were judged again, as the protocol says: `without/action_items-07-3` and `drafted/action_items-07-2` once, `without/action_items-07-1` five times, the last after midnight. Each `judge.json` holds the cost of its last judging only: the seven overwritten ones cost about $0.46 more.
 
 ## Done when
 

@@ -1,0 +1,105 @@
+--- a/README.md
++++ b/README.md
+@@ -9,7 +9,7 @@
+ The model reads the notes and writes the items. The code decides what is kept:
+ 
+ - lines of the answer that are not `task | owner | due` are skipped;
+-- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
++- an owner who attended is returned spelled as the caller gave it; an owner who did not attend is kept, with `owner_attended` set to `False`, only if the notes mention that name; otherwise the item stays with `owner` set to `None`. So `owner is None` always means nobody took the task;
+ - a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -20,8 +20,11 @@
+ task | owner | due
+ 
+ - task: a short imperative sentence, e.g. "Send the revised quote to Halden".
+-- owner: the name of the person responsible, as written in the list above,
+-  or "none" if nobody took it.
++- owner: the name of the person responsible, or "none" if nobody took it.
++  Use the spelling from the list above for people who were present. If the
++  notes say the task belongs to someone who was not in the meeting, give that
++  person's name as written in the notes: a task someone else has taken is
++  theirs, not "none".
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
+ 
+ If there are no action items, write only: NONE
+@@ -37,8 +40,10 @@
+ @dataclass(frozen=True)
+ class ActionItem:
+     task: str
+-    owner: Optional[str]  # one of the attendees, spelled as the caller gave it
++    owner: Optional[str]  # None only if nobody took the task
+     due: Optional[date]
++    # False when the owner is named in the notes but was not at the meeting.
++    owner_attended: bool = True
+ 
+ 
+ def extract_action_items(
+@@ -51,8 +56,9 @@
+ 
+     `model` takes a prompt and returns text. Its answer is not trusted: lines
+     that are not in the requested form are skipped, an owner who was not in
+-    the meeting becomes None, and so does a deadline that is not a real date
+-    or falls before the meeting.
++    the meeting is kept (with `owner_attended` False) only if the notes
++    mention that name, otherwise it becomes None, and a deadline that is not
++    a real date or falls before the meeting becomes None.
+     """
+     if not notes.strip():
+         return []
+@@ -76,12 +82,12 @@
+         task = _clean_task(fields[0])
+         if not task or _key(task) == "task":  # empty, or the header echoed back
+             continue
+-        owner = by_name.get(_key(fields[1]))
++        owner, attended = _resolve_owner(fields[1], by_name, _key(notes))
+         due = _parse_due(fields[2], meeting_date)
+         if (_key(task), owner) in seen:
+             continue
+         seen.add((_key(task), owner))
+-        items.append(ActionItem(task, owner, due))
++        items.append(ActionItem(task, owner, due, attended))
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+@@ -90,6 +96,18 @@
+ 
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
++
++
++def _resolve_owner(text, by_name, notes_key):
++    key = _key(text)
++    if key in _EMPTY:
++        return None, True
++    if key in by_name:
++        return by_name[key], True
++    # Not an attendee: believe the model only if the notes really name them.
++    if re.search(r"(?<!\w)" + re.escape(key) + r"(?!\w)", notes_key):
++        return " ".join(text.split()), False
++    return None, True
+ 
+ 
+ def _clean_task(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -89,7 +89,16 @@
+         items = run("Book the room | tom  BECKER | none")
+         self.assertEqual(items[0].owner, "Tom Becker")
+ 
+-    def test_owner_who_was_not_in_the_meeting_is_dropped_but_item_kept(self):
++    def test_owner_named_in_notes_who_was_absent_is_kept_and_flagged(self):
++        notes = "Marta Olsen from finance couldn't join. Marta Olsen will approve the budget."
++        items = run("Approve the budget | marta  olsen | 2026-03-10", notes)
++        self.assertEqual(
++            items,
++            [ActionItem("Approve the budget", "marta olsen", date(2026, 3, 10), False)],
++        )
++        self.assertTrue(run("Book the room | Tom Becker | none")[0].owner_attended)
++
++    def test_owner_not_in_meeting_or_notes_is_dropped_but_item_kept(self):
+         items = run("Approve the budget | Marta Olsen | none")
+         self.assertEqual(items, [ActionItem("Approve the budget", None, None)])
+ 

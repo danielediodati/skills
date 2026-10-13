@@ -1,0 +1,31 @@
+--- a/seam.py
++++ b/seam.py
+@@ -14,6 +14,13 @@
+ queue: one of {queues}
+ urgency: one of {urgencies}
+ summary: one sentence saying what the customer needs
++
++Urgency means how much the ticket's own content calls for a fast answer:
++- urgent: something is broken for the customer or their users right now (an outage, failing checkout, data loss, a security problem) and waiting an hour costs real damage.
++- high: a serious problem with a workaround, or a request with a real deadline that is days away.
++- normal: an ordinary request or question, even a polite one with a date on it.
++- low: no time pressure.
++A deadline or a firm tone alone does not make a ticket urgent.
+ 
+ Subject: {subject}
+ 
+--- a/test.py
++++ b/test.py
+@@ -42,6 +42,12 @@
+         self.assertEqual(len(model.prompts), 1)
+         self.assertIn("Charged twice", model.prompts[0])
+         self.assertIn("September invoice", model.prompts[0])
++
++    def test_prompt_defines_urgency_and_hides_the_tier(self):
++        model = FakeModel("queue: billing\nurgency: low\nsummary: x")
++        triage_ticket(TICKET, model)
++        self.assertIn("broken for the customer", model.prompts[0])
++        self.assertNotIn("enterprise", model.prompts[0].lower())
+ 
+     def test_decorated_answer_is_understood(self):
+         result = triage("**Queue:** Billing.\n- URGENCY: `Low`\nSummary: Refund.")
