@@ -1,0 +1,127 @@
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,6 @@
+ 
+ `recommend_products(query, catalog, model, limit=5)` takes what the shopper typed, the catalogue (a list of products, each with `id`, `name`, `price`, `rating` and `in_stock`) and a model, any callable that takes a prompt string and returns a string. The model chooses the products that suit the search, puts them in order and writes a short reason for each.
+ 
+-The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product). Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
++The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product). Only products that exist in the catalogue and are in stock are returned, each one once. Every product returned has a non-empty reason: if the model leaves one out it is asked once more for just those products, and a product that still has no reason is left out (the next pick takes its place). A blank search, or a catalogue with nothing in stock, gives an empty list.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -10,6 +10,16 @@
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
+ 
+ Products (ID | name | price | rating out of 5):
++{products}
++"""
++
++REASON_PROMPT = """A customer of an online shop searched for: {query}
++
++For each product below, say in one short sentence, addressed to the customer,
++why it is worth their attention for this search.
++Answer with one product per line, as: ID | one short reason
++
++Products (ID | name):
+ {products}
+ """
+ 
+@@ -38,16 +48,37 @@
+         ),
+     ))
+ 
++    candidates = _parse(answer, available)
++
++    # The model sometimes names a product and leaves the reason out. Ask once
++    # more for just those; a product still without a reason is not shown.
++    missing = [c for c in candidates[:limit] if not c["reason"]]
++    if missing:
++        retry = _parse(model(REASON_PROMPT.format(
++            query=query,
++            products="\n".join(
++                f"{c['id']} | {c['name']}" for c in missing
++            ),
++        )), {c["id"]: c for c in missing})
++        reasons = {c["id"]: c["reason"] for c in retry}
++        for c in missing:
++            c["reason"] = reasons.get(c["id"], "")
++
++    return [c for c in candidates if c["reason"]][:limit]
++
++
++def _parse(answer, known):
++    """Read `ID | reason` lines, keeping known IDs once each, in order."""
+     picks = []
+     seen = set()
+     for line in answer.splitlines():
+         product_id, _, reason = LIST_MARKER.sub("", line).partition("|")
+         product_id = product_id.strip()
+         # The model may invent an ID or repeat one: only real, new ones count.
+-        if product_id not in available or product_id in seen:
++        if product_id not in known or product_id in seen:
+             continue
+         seen.add(product_id)
+-        product = available[product_id]
++        product = known[product_id]
+         picks.append({
+             "id": product_id,
+             "name": product["name"],
+@@ -55,6 +86,4 @@
+             "rating": product["rating"],
+             "reason": " ".join(reason.split())[:MAX_REASON_CHARS],
+         })
+-        if len(picks) == limit:
+-            break
+     return picks
+--- a/test.py
++++ b/test.py
+@@ -19,6 +19,16 @@
+     def __call__(self, prompt):
+         self.prompts.append(prompt)
+         return self.answer
++
++
++class SequenceModel:
++    def __init__(self, answers):
++        self.answers = list(answers)
++        self.prompts = []
++
++    def __call__(self, prompt):
++        self.prompts.append(prompt)
++        return self.answers.pop(0)
+ 
+ 
+ def recommend(answer, query="headphones", **options):
+@@ -75,9 +85,28 @@
+         self.assertTrue(result[0]["reason"].startswith("Best sound !!!"))
+         self.assertEqual(len(result[0]["reason"]), 80)
+ 
+-    def test_pick_without_a_reason_has_an_empty_one(self):
+-        result = recommend("H-100")
+-        self.assertEqual(result[0]["reason"], "")
++    def test_pick_without_a_reason_is_asked_for_again(self):
++        model = SequenceModel(["H-100 | Best sound\nH-200", "H-200 | Light and cheap"])
++        result = recommend_products("headphones", CATALOG, model)
++        self.assertEqual([(p["id"], p["reason"]) for p in result],
++                         [("H-100", "Best sound"), ("H-200", "Light and cheap")])
++        self.assertEqual(len(model.prompts), 2)
++        self.assertIn("H-200 | Pico wired earbuds", model.prompts[1])
++        self.assertNotIn("H-100", model.prompts[1])
++
++    def test_pick_still_without_a_reason_is_dropped(self):
++        model = SequenceModel(["H-100 | Best sound\nH-200 |  ", "H-200 |"])
++        result = recommend_products("headphones", CATALOG, model)
++        self.assertEqual([p["id"] for p in result], ["H-100"])
++
++    def test_dropped_pick_is_replaced_by_the_next_one(self):
++        model = SequenceModel(["H-100\nH-200 | Cheap\nC-010 | Short", ""])
++        result = recommend_products("headphones", CATALOG, model, limit=2)
++        self.assertEqual([p["id"] for p in result], ["H-200", "C-010"])
++
++    def test_every_returned_product_has_a_reason(self):
++        result = recommend("H-100\nH-200 |\nC-020 | Long enough")
++        self.assertEqual([p["id"] for p in result], ["C-020"])
+ 
+     def test_blank_query_returns_nothing_without_asking_the_model(self):
+         model = FakeModel("H-100 | Best sound")

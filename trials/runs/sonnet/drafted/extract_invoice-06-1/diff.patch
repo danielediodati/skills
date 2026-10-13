@@ -1,0 +1,37 @@
+--- a/seam.py
++++ b/seam.py
+@@ -11,6 +11,9 @@
+ "supplier" (string), "invoice_number" (string), "issue_date" (YYYY-MM-DD),
+ "currency" (three-letter code), "lines" (a list of objects with "description",
+ "quantity" and "unit_price") and "total" (the amount due).
++Every line needs both "quantity" and "unit_price". A charge the invoice prints as
++a single amount, with no quantity or price per unit (a delivery charge, a flat
++fee), has "quantity" 1 and that amount as "unit_price".
+ Answer with the JSON object only.
+ 
+ Invoice:
+--- a/test.py
++++ b/test.py
+@@ -71,6 +71,22 @@
+         self.assertEqual(len(model.prompts), 1)
+         self.assertIn(INVOICE_TEXT, model.prompts[0])
+ 
++    def test_prompt_explains_single_amount_charges(self):
++        model = FakeModel(json.dumps(ANSWER))
++        extract_invoice(INVOICE_TEXT, model)
++        self.assertIn("single amount", model.prompts[0])
++        self.assertIn('"quantity" 1', model.prompts[0])
++
++    def test_flat_charge_reported_as_quantity_one_loads(self):
++        lines = [
++            {"description": "Steel brackets", "quantity": 40, "unit_price": "6.25"},
++            {"description": "Delivery", "quantity": 1, "unit_price": "35.00"},
++        ]
++        result = extract(lines=lines, total="285.00")
++        self.assertEqual(result["lines"][1]["amount"], Decimal("35.00"))
++        self.assertEqual(result["lines_total"], Decimal("285.00"))
++        self.assertEqual(result["status"], "ok")
++
+     def test_json_inside_a_code_fence_is_read(self):
+         answer = "Here is the invoice:\n```json\n" + json.dumps(ANSWER) + "\n```"
+         result = extract_invoice(INVOICE_TEXT, FakeModel(answer))

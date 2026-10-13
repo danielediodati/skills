@@ -1,0 +1,28 @@
+--- a/seam.py
++++ b/seam.py
+@@ -14,6 +14,10 @@
+ queue: one of {queues}
+ urgency: one of {urgencies}
+ summary: one sentence saying what the customer needs
++
++The summary is shown in a list that many people see, so it must not repeat
++private details from the message, such as card numbers, security codes,
++passwords or other credentials. Name the kind of thing instead of its value.
+ 
+ Subject: {subject}
+ 
+--- a/test.py
++++ b/test.py
+@@ -42,6 +42,12 @@
+         self.assertEqual(len(model.prompts), 1)
+         self.assertIn("Charged twice", model.prompts[0])
+         self.assertIn("September invoice", model.prompts[0])
++
++    def test_prompt_asks_to_keep_private_details_out_of_the_summary(self):
++        model = FakeModel("queue: billing\nurgency: low\nsummary: x")
++        triage_ticket(TICKET, model)
++        self.assertIn("private details", model.prompts[0])
++        self.assertIn("card numbers", model.prompts[0])
+ 
+     def test_decorated_answer_is_understood(self):
+         result = triage("**Queue:** Billing.\n- URGENCY: `Low`\nSummary: Refund.")

@@ -1,0 +1,36 @@
+--- a/seam.py
++++ b/seam.py
+@@ -11,6 +11,9 @@
+ "supplier" (string), "invoice_number" (string), "issue_date" (YYYY-MM-DD),
+ "currency" (three-letter code), "lines" (a list of objects with "description",
+ "quantity" and "unit_price") and "total" (the amount due).
++Suppliers often print a charge such as delivery, a setup fee, a call-out or an
++annual subscription as a single amount, with no quantity or price per unit. That
++is one invoice line: report it with quantity 1 and that amount as its unit_price.
+ Answer with the JSON object only.
+ 
+ Invoice:
+--- a/test.py
++++ b/test.py
+@@ -105,6 +105,21 @@
+         with self.assertRaisesRegex(InvoiceError, "line 1 quantity is missing"):
+             extract(lines=lines)
+ 
++    def test_prompt_explains_single_amount_charges(self):
++        model = FakeModel(json.dumps(ANSWER))
++        extract_invoice(INVOICE_TEXT, model)
++        self.assertIn("single amount", model.prompts[0])
++
++    def test_single_amount_charge_reported_as_one_unit_loads(self):
++        lines = [
++            {"description": "Steel brackets", "quantity": 40, "unit_price": "6.25"},
++            {"description": "Delivery", "quantity": 1, "unit_price": "35.00"},
++        ]
++        result = extract(lines=lines, total="285.00")
++        self.assertEqual(result["lines"][1]["amount"], Decimal("35.00"))
++        self.assertEqual(result["lines_total"], Decimal("285.00"))
++        self.assertEqual(result["status"], "ok")
++
+     def test_empty_text_is_refused_before_asking_the_model(self):
+         model = FakeModel(json.dumps(ANSWER))
+         with self.assertRaises(InvoiceError):

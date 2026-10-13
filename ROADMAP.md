@@ -16,7 +16,6 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 Sixteen problem-only requests, three runs each, one draft per run, judged by Opus against the user's charters. 72 new trials; no session of work runs more than 30.
 
-2. **Sonnet on requests 06.** 24 trials - [ticket](docs/work/5-sonnet-drift/issues/02-sonnet-06.md)
 3. **Sonnet on requests 07.** 24 trials - [ticket](docs/work/5-sonnet-drift/issues/03-sonnet-07.md)
 4. **Calibrate the judge of Sonnet's trials.** Eight trials, condition hidden - [ticket](docs/work/5-sonnet-drift/issues/04-calibration.md)
 5. **Sonnet's result, and its number in the README.** As the protocol's rule gives it - [ticket](docs/work/5-sonnet-drift/issues/05-results.md)

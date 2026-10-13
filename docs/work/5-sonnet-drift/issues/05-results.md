@@ -9,6 +9,7 @@ Blocked by: 04
 - `README.md`: a short section with Sonnet's result, its intervals, one line on how it was measured (a charter the agent wrote, nobody read) and what that charter costs (the stops), with a link to the protocol and the results. It says Haiku is still to run. Whatever the result is, it is quoted as the rule gives it.
 - `openpoints.md`: what the result means for the plugin's claim, for the `charter` skill and for `edd`.
 - The 24 `without` trials on `04` and `05` are reused from session 3 and ran on 2026-10-11; their `drafted` counterparts ran on 2026-10-13. The results say so.
+- The 24 trials on `06` ran on 2026-10-13, the two conditions side by side.
 
 ## Done when
 

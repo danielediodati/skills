@@ -1,0 +1,94 @@
+--- a/seam.py
++++ b/seam.py
+@@ -2,15 +2,19 @@
+ 
+ import re
+ from dataclasses import dataclass
+-from datetime import date
++from datetime import date, timedelta
+ from typing import Callable, List, Optional, Sequence
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+ 
+ PROMPT = """\
+-Below are the notes of a meeting held on {meeting_date}.
++Below are the notes of a meeting held on {meeting_weekday} {meeting_date}.
+ The people present were: {attendees}.
++
++The days following the meeting, for working out deadlines given as "Friday",
++"next week" and the like:
++{calendar}
+ 
+ List every action item agreed in the meeting: something a person committed
+ to do after it. Leave out decisions, opinions and things already done.
+@@ -23,6 +27,8 @@
+ - owner: the name of the person responsible, as written in the list above,
+   or "none" if nobody took it.
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
++  Deadlines said the way people say them in a meeting ("by Friday", "end of
++  next week") are deadlines: resolve them against the calendar above.
+ 
+ If there are no action items, write only: NONE
+ 
+@@ -30,6 +36,15 @@
+ {notes}
+ """
+ 
++_WEEKDAYS = (
++    "Monday",
++    "Tuesday",
++    "Wednesday",
++    "Thursday",
++    "Friday",
++    "Saturday",
++    "Sunday",
++)
+ _EMPTY = {"", "none", "n/a", "-", "?", "tbd", "unassigned"}
+ _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
+ 
+@@ -58,7 +73,9 @@
+         return []
+ 
+     prompt = PROMPT.format(
++        meeting_weekday=_WEEKDAYS[meeting_date.weekday()],
+         meeting_date=meeting_date.isoformat(),
++        calendar=_calendar(meeting_date),
+         attendees=", ".join(attendees),
+         notes=notes.strip(),
+     )
+@@ -88,6 +105,17 @@
+     return items[:MAX_ITEMS]
+ 
+ 
++def _calendar(meeting_date: date, days: int = 21) -> str:
++    """One line per day from the meeting on, weekday first, grouped by week."""
++    lines = []
++    for offset in range(days):
++        day = meeting_date + timedelta(days=offset)
++        lines.append(f"{_WEEKDAYS[day.weekday()]} {day.isoformat()}")
++        if day.weekday() == 6 and offset != days - 1:
++            lines.append("")  # blank line between weeks
++    return "\n".join(lines)
++
++
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
+ 
+--- a/test.py
++++ b/test.py
+@@ -33,6 +33,14 @@
+         self.assertIn(NOTES, prompt)
+         self.assertIn("Ana Ruiz, Tom Becker, Priya Raman", prompt)
+         self.assertIn("2026-03-03", prompt)
++
++    def test_prompt_gives_the_weekday_and_a_calendar_for_relative_deadlines(self):
++        model = FakeModel("NONE")
++        extract_action_items(NOTES, ATTENDEES, MEETING, model)
++        prompt = model.prompts[0]
++        self.assertIn("Tuesday 2026-03-03", prompt)
++        self.assertIn("Friday 2026-03-06", prompt)
++        self.assertIn("Friday 2026-03-13", prompt)
+ 
+     def test_blank_notes_do_not_reach_the_model(self):
+         model = FakeModel("Do something | Ana Ruiz | none")
