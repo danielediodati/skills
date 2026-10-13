@@ -27,7 +27,9 @@ TRIALS = Path(__file__).resolve().parent
 SEAMS = TRIALS / "seams"
 CHARTERS = TRIALS / "charters"
 SETUP_SKILL = TRIALS.parent / "a4a" / "skills" / "setup" / "SKILL.md"
-CHARTERS_AUTO = TRIALS / "charters-auto"  # written by an agent from the code, read by nobody
+# Written by an agent from the code, read by nobody. Session 3's four are at the top; the drafts of
+# "drafted", three per seam and model, are in <model>/<seam>-<n>.md.
+CHARTERS_AUTO = TRIALS / "charters-auto"
 RULE_ONLY_PROTOCOL = TRIALS / "protocol-rule-only.md"
 AUTO_CHARTER_PROTOCOL = TRIALS / "protocol-auto-charter.md"
 # Written by an agent from the code and the practices that say where a line belongs.
@@ -36,7 +38,7 @@ PRACTICE_CHARTER_PROTOCOL = TRIALS / "protocol-practice-charter.md"
 RUNS = TRIALS / "runs"
 WORK_ROOT = Path(os.environ.get("CHARTER_TRIAL_WORK") or Path(tempfile.gettempdir()) / "charter-trial")
 
-MODELS = {"sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"}
+MODELS = {"sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5", "haiku": "claude-haiku-5-5"}
 REPEATS = 3
 SEAM_FILES = ("seam.py", "test.py", "README.md")
 IGNORED_DIRS = {"__pycache__", ".pytest_cache"}
@@ -73,13 +75,22 @@ def prepare(model, condition, trial_id, seam_dir):
     for name in SEAM_FILES:
         shutil.copy2(seam_dir / name, work / name)
     if condition not in ("without", "rule-only"):
-        charters = {"auto-charter": CHARTERS_AUTO, "practice-charter": CHARTERS_PRACTICE}.get(condition, CHARTERS)
         charter = work / "evals" / seam_dir.name / "charter.md"
         charter.parent.mkdir(parents=True)
-        shutil.copy2(charters / f"{seam_dir.name}.md", charter)
+        shutil.copy2(charter_source(model, condition, trial_id, seam_dir.name), charter)
     if condition != "without":
         (work / "AGENTS.md").write_text(agents_rule(condition), encoding="utf-8")
     return work
+
+
+def charter_source(model, condition, trial_id, seam):
+    """The charter a trial is given. "drafted": the draft the agent's own model wrote, a different
+    one for each repeat of a request."""
+    if condition == "drafted":
+        repeat = trial_id.rsplit("-", 1)[1]
+        return CHARTERS_AUTO / model / f"{seam}-{repeat}.md"
+    charters = {"auto-charter": CHARTERS_AUTO, "practice-charter": CHARTERS_PRACTICE}.get(condition, CHARTERS)
+    return charters / f"{seam}.md"
 
 
 def agents_rule(condition):
@@ -186,8 +197,9 @@ def main():
     # "rule-only": no charter, and the rule as trials/protocol-rule-only.md words it.
     # "auto-charter": a charter from trials/charters-auto/, and the rule as its protocol words it.
     # "practice-charter": a charter from trials/charters-practice/, and the rule as its protocol words it.
+    # "drafted": a draft the agent's own model wrote, one per repeat, and the rule as setup/SKILL.md ships it.
     parser.add_argument("condition", choices=(
-        "without", "with", "with-v2", "rule-only", "auto-charter", "practice-charter"))
+        "without", "with", "with-v2", "rule-only", "auto-charter", "practice-charter", "drafted"))
     parser.add_argument("--model", choices=MODELS, required=True, help="the coding agent")
     parser.add_argument("--requests", nargs="*", help="request names to run, e.g. 04 05")
     parser.add_argument("--only", nargs="*", help="trial ids to run, e.g. triage_ticket-01-1")

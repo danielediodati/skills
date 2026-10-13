@@ -5,9 +5,9 @@
 
 For each trial folder under trials/runs/<model>/<condition>/, the judge gets the rubric's
 instructions and the five inputs, and its answer lands in verdict.md beside the trial.
-The judge is the model that did not run the trial, read from its session.json, and is
-recorded in judge.json. A trial whose verdict has a row for every charter line is skipped;
-a verdict missing a line is judged again.
+The judge is never the model that ran the trial, read from its session.json, and is
+recorded in judge.json with what the verdict cost. A trial whose verdict has a row for every
+charter line is skipped; a verdict missing a line is judged again.
 """
 
 import argparse
@@ -23,16 +23,17 @@ JUDGE = Path(__file__).resolve().parent
 TRIALS = JUDGE.parent
 RUBRIC = JUDGE / "rubric.md"
 
-# Each model's trials are judged by the other one.
-JUDGES = {"claude-sonnet-5-5": "claude-opus-5-5", "claude-opus-5-5": "claude-sonnet-5-5"}
-AGENTS = ("sonnet", "opus")  # the folders under trials/runs/
+# No model judges its own trials: Opus judges Sonnet's, Sonnet judges Opus's and Haiku's.
+JUDGES = {"claude-sonnet-5-5": "claude-opus-5-5", "claude-opus-5-5": "claude-sonnet-5-5",
+          "claude-haiku-5-5": "claude-sonnet-5-5"}
+AGENTS = ("sonnet", "opus", "haiku")  # the folders under trials/runs/
 SEAM_FILES = ("seam.py", "test.py", "README.md")
 TIMEOUT_SECONDS = 15 * 60
 
 # What would reveal the condition: the charter file and the AGENTS.md rule in the diff,
 # and any sentence of the answer naming them. A sentence naming a model would reveal the agent.
 REVEALING_PATHS = re.compile(r"^(evals/|AGENTS\.md$)")
-REVEALING_WORDS = re.compile(r"charter|AGENTS\.md|evals/|\bsonnet\b|\bopus\b", re.IGNORECASE)
+REVEALING_WORDS = re.compile(r"charter|AGENTS\.md|evals/|\bsonnet\b|\bopus\b|\bhaiku\b", re.IGNORECASE)
 # A dot inside a word ("AGENTS.md", "seam.py") does not end the sentence.
 SENTENCE = re.compile(r"(?:[^.!?\n]|[.!?]+(?=[^\s.!?]))*(?:[.!?]+|\n|$)")
 
@@ -117,18 +118,25 @@ def judge_model(trial_dir):
 def judge(trial_dir):
     model = judge_model(trial_dir)
     completed = subprocess.run(
-        [shutil.which("claude"), "-p", "--model", model, "--safe-mode", "--tools", ""],
+        [shutil.which("claude"), "-p", "--model", model, "--safe-mode", "--tools", "",
+         "--output-format", "json"],
         input=prompt(trial_dir),
         capture_output=True,
         text=True,
         encoding="utf-8",
         timeout=TIMEOUT_SECONDS,
     )
-    if completed.returncode != 0:
-        return trial_dir.name, f"ERROR {completed.returncode}: {completed.stderr[-500:]}"
-    (trial_dir / "verdict.md").write_text(completed.stdout, encoding="utf-8")
-    missing = missing_lines(completed.stdout, seam_of(trial_dir))
-    record = {"model": model, "missing_lines": missing}
+    try:
+        result = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        result = {"is_error": True, "result": completed.stdout}
+    if completed.returncode != 0 or result.get("is_error"):
+        return trial_dir.name, (f"ERROR {completed.returncode}: "
+                                f"{completed.stderr[-500:] or str(result.get('result'))[-500:]}")
+    verdict = result.get("result") or ""
+    (trial_dir / "verdict.md").write_text(verdict, encoding="utf-8")
+    missing = missing_lines(verdict, seam_of(trial_dir))
+    record = {"model": model, "missing_lines": missing, "cost_usd": result.get("total_cost_usd")}
     (trial_dir / "judge.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     if missing:
         return trial_dir.name, f"INCOMPLETE, judged by {model}: no row for {', '.join(missing)}"
@@ -138,7 +146,7 @@ def judge(trial_dir):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("condition", choices=(
-        "without", "with", "with-v2", "rule-only", "auto-charter", "practice-charter"))
+        "without", "with", "with-v2", "rule-only", "auto-charter", "practice-charter", "drafted"))
     parser.add_argument("--model", choices=AGENTS, required=True, help="the coding agent whose trials are judged")
     parser.add_argument("--only", nargs="*", help="trial ids to judge")
     parser.add_argument("--parallel", type=int, default=4)

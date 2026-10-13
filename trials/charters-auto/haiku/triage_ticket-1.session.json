@@ -1,0 +1,12 @@
+{
+  "seam": "triage_ticket",
+  "model": "claude-haiku-5-5",
+  "exit_code": 0,
+  "wrote_charter": true,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 4,
+  "duration_ms": 21308,
+  "total_cost_usd": 0.00361461,
+  "session_id": "854377c7-9e5b-42f4-b26c-072a41b7c5d4"
+}
