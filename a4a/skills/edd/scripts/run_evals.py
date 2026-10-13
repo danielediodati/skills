@@ -7,6 +7,7 @@ Copy into <project>/evals/ next to judge.py and calibrate.py. Layout, relative t
     <seam>/system.py     run(case_input) -> {"output": ..., "tokens"?: int, "seconds"?: float, "cost"?: float}
                          constants MODEL, PROVIDER and COST_PER_CASE (dollars per call, 0 when free)
     <seam>/grader.py     grade(case, result) -> bool, or float in [0, 1] passing at >= 0.5
+    <seam>/eval.md       the seam's target, on a line "- Target: 0.80" (FORMAT.md)
     <seam>/runs/         written here: one JSON per run
     <seam>/best.json     written here: the best result of each model on each split
     log.md               written here: one row per run
@@ -31,8 +32,8 @@ estimate, without a call.
 Examples:
     python evals/run_evals.py --agree-budget 2.00 --note "ticket 12"   # only once the user agreed it
     EVAL_SET=cases.jsonl python evals/run_evals.py planner --check
-    EVAL_SET=cases.jsonl python evals/run_evals.py planner --target 0.80 --note "tool descriptions rewritten"
-    EVAL_SET=cases.jsonl python evals/run_evals.py planner --split heldout --target 0.80
+    EVAL_SET=cases.jsonl python evals/run_evals.py planner --note "tool descriptions rewritten"
+    EVAL_SET=cases.jsonl python evals/run_evals.py planner --split heldout
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -54,6 +56,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # no __pycache__ next to the seams: it would mark the tree dirty
 
 EVAL_SET_VAR = "EVAL_SET"  # names the eval set, a file in the seam's directory, never a path in the code
+TARGET_FILE = "eval.md"  # beside the eval set: the seam's target and the direction of its eval set
 SPENDING = "spending.json"
 LOG_HEADER = (
     "| date | commit | seam | eval set | model | provider | split | set | k | score | spread "
@@ -155,6 +158,15 @@ def load_cases(path: Path, split: str) -> tuple[list[dict], list[dict]]:
     if not core:
         sys.exit(f"no core {split} cases in {path}: mark the core set with \"core\": true (FORMAT.md)")
     return core, [c for c in cases if not c.get("core")]
+
+
+def read_target(seam_dir: Path) -> float | None:
+    """The target the seam declares beside its eval set, or None when it declares none."""
+    path = seam_dir / TARGET_FILE
+    if not path.is_file():
+        return None
+    found = re.search(r"(?m)^- Target:\s*([01](?:\.\d+)?)", path.read_text(encoding="utf-8"))
+    return float(found.group(1)) if found else None
 
 
 def run_case(case: dict, system, grader, k: int, per_call: float) -> dict:
@@ -356,7 +368,8 @@ def main() -> int:
     parser.add_argument("--check", action="store_true",
                         help="run nothing paid: check the eval set and the adapter, show the cost estimate")
     parser.add_argument("--target", type=float, default=None,
-                        help="the charter's target: the core set must reach it before the extended set runs")
+                        help=f"the target, in place of the one in the seam's {TARGET_FILE}: the core set must "
+                             f"reach it before the extended set runs")
     parser.add_argument("--split", default="dev", choices=["dev", "heldout"])
     parser.add_argument("--k", type=int, default=3, help="runs per case, odd")
     parser.add_argument("--workers", type=int, default=1, help="cases run in parallel (1 for local CPU models)")
@@ -376,8 +389,11 @@ def main() -> int:
     if args.k % 2 == 0:
         sys.exit("use an odd k, so a case's majority is never a tie")
     eval_set = eval_set_path(seam_dir)
-    if args.target is None and not args.check:
-        sys.exit("--target is required: the charter's target decides whether the extended set runs")
+    declared = read_target(seam_dir)
+    target = declared if args.target is None else args.target
+    if target is None and not args.check:
+        sys.exit(f"no target: write it in {seam_dir / TARGET_FILE}, on a line \"- Target: 0.80\"; "
+                 f"it decides whether the extended set runs")
 
     sys.path[:0] = [str(seam_dir), str(root)]  # graders can import judge.py from the evals root
     system = load_module(seam_dir / "system.py", f"{args.seam}_system")
@@ -422,8 +438,10 @@ def main() -> int:
     report = [f"{args.seam} | {eval_set.name} | {args.split} | k={k} | {model} ({provider}) | {commit}",
               f"core set: {core_score:.2f} (spread {spread(core_per_run)}) over {len(core_results)} cases",
               f"cost ${core_cost:.2f}; {fmt_total(spending)}"]
-    if core_score < args.target:
-        report.append(f"target {args.target:.2f}: not met on the core set; the extended set "
+    if args.target is not None and declared is not None and args.target != declared:
+        report.append(f"target {target:.2f} from --target; {TARGET_FILE} says {declared:.2f}")
+    if core_score < target:
+        report.append(f"target {target:.2f}: not met on the core set; the extended set "
                       f"({len(rest)} more cases) does not run")
         report.append(f"run saved: {runs_dir / (core_run + '.json')}")
         emit(report)
@@ -480,7 +498,7 @@ def main() -> int:
         if losses:
             report.append(f"  losses: {', '.join(losses)} (keeping this change accepts them)")
             notes.append(f"losses: {', '.join(losses)}")
-    report.extend(verdict(score, per_run, args.target, mine))
+    report.extend(verdict(score, per_run, target, mine))
 
     run_id = save_run(root, runs_dir, settings, "extended", results, score, per_run, "; ".join(notes),
                       paired=paired, cost=rest_cost, spent=spending["spent"] + rest_cost if spending else None)
@@ -492,7 +510,7 @@ def main() -> int:
     (seam_dir / "best.json").write_text(json.dumps(best, indent=1), encoding="utf-8")
     report.append(f"run saved: {runs_dir / (run_id + '.json')}")
     emit(report)
-    return 0 if score >= args.target else 1
+    return 0 if score >= target else 1
 
 
 if __name__ == "__main__":

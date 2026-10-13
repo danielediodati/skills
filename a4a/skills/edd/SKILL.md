@@ -11,7 +11,8 @@ A deterministic seam (same input, same output) is tested with unit tests written
 
 ## Before the first change
 
-- **Read the charter** at `evals/<seam>/charter.md`: what the model is free to decide, what code constrains, the target. A seam with no charter gets one first, with the user (see Other skills). Only the user changes a charter.
+- **Read the charter** at `evals/<seam>/charter.md`: what the model is free to decide, what code constrains, the budget. A seam with no charter gets one first (see Other skills). Only the user changes a charter.
+- **Read the target** at `evals/<seam>/eval.md`, beside the eval set: the score the seam has to reach. A seam with no target gets one from the user before its first run, written there as [FORMAT.md](FORMAT.md) says. Only the user sets or corrects a target.
 - **Find the eval set**: `evals/<seam>/cases.jsonl` and `grader.py`, read as [FORMAT.md](FORMAT.md) and [GRADERS.md](GRADERS.md) describe them. A seam with no eval set gets one before it changes; writing it is not this skill's job (see Other skills).
 
 ## Nothing paid without approval
@@ -44,8 +45,8 @@ The charter splits the seam's decisions between the model (freedom) and code (co
 ## The loop
 
 1. **One change.** A prompt, a tool description, the model, the code around the call, a sampling parameter, a retrieval setting. Two changes in one run cannot be attributed.
-2. **Core set, then extended set.** `EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --target <charter's target> --note "<the change>"`. The core set (the cases marked `core`) runs first; a change whose core score is below the target is rejected without a call spent on the rest. The extended set, every case of the split, runs only after the core passes, and only it can accept a change. The eval set is named in the environment, never by a path in the code.
-3. **Verdict.** Below the charter's target: failure, the only one. Below this model's best result by more than the run-to-run spread (the wider of the two runs' spreads), at or above the target: a warning in the report, not a failure, because the highest score is partly a lucky run. The best result informs; the target decides. Best results are kept per model, each with the code version it was measured on: a change to the grader or the eval set discards them all, a change to the code keeps them, reported as measured on an earlier version.
+2. **Core set, then extended set.** `EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --note "<the change>"`. The runner reads the target from `evals/<seam>/eval.md`. The core set (the cases marked `core`) runs first; a change whose core score is below the target is rejected without a call spent on the rest. The extended set, every case of the split, runs only after the core passes, and only it can accept a change. The eval set is named in the environment, never by a path in the code.
+3. **Verdict.** Below the seam's target: failure, the only one. Below this model's best result by more than the run-to-run spread (the wider of the two runs' spreads), at or above the target: a warning in the report, not a failure, because the highest score is partly a lucky run. The best result informs; the target decides. Best results are kept per model, each with the code version it was measured on: a change to the grader or the eval set discards them all, a change to the code keeps them, reported as measured on an earlier version.
 4. **Check the diff against the charter as it was** (next section). It runs whatever the score, and a moved line stops the change.
 5. **Read the losses.** The runner lists by case id the cases the change turned from pass to fail. Keeping the change accepts them; say so to the user.
 6. **Read failures.** Read the failing outputs and tag each with a failure category in the case's `tags`. The categories, not the score, choose the next change.
@@ -95,13 +96,14 @@ Derive each seam's categories from its first failures and keep them few (3 to 7)
 
 ## Other skills
 
-- `charter` writes a seam's charter with the user, and amends it when the user moves a line.
-- `eval` will write a seam's eval set: cases, graders, judge calibration, the core and extended sets. Until it exists, [FORMAT.md](FORMAT.md) and [GRADERS.md](GRADERS.md) are where the eval set's rules stand.
+- `charter` writes a seam's charter from its code, and amends it when the user moves a line.
+- `eval` will write a seam's eval set: cases, graders, judge calibration, the core and extended sets. Until it exists, [FORMAT.md](FORMAT.md) and [GRADERS.md](GRADERS.md) are where the eval set's rules stand, and `evals/<seam>/eval.md` holds its target and direction.
 - `setup` writes the rule a project's `AGENTS.md` carries for stochastic seams and spending.
 
 ## Where things live
 
 - `evals/<seam>/charter.md`: the seam charter.
+- `evals/<seam>/eval.md`: the seam's target and the direction of its eval set.
 - `evals/<seam>/cases.jsonl`, `system.py`, `grader.py`: the eval set, the adapter that runs one case through the seam, the grader. Formats in [FORMAT.md](FORMAT.md).
 - `evals/<seam>/calibration.jsonl`: labels for calibrating a model judge ([GRADERS.md](GRADERS.md)).
 - `evals/<seam>/runs/`: one file per run, written by the runner.

@@ -7,7 +7,7 @@ A coding agent working on a system where a model decides tends to move decisions
 | Skill | When |
 |---|---|
 | `setup` | Once per project: writes the rule into `AGENTS.md` and lists the stochastic seams, with or without a charter. Call it with `/a4a:setup`. |
-| `charter` | When a seam is designed, has no charter, or someone wants to move its line between freedom and constraint. |
+| `charter` | When a seam has no charter, or you move its line between freedom and constraint. The agent writes it from the seam's code, with no interview. |
 | `edd` | When a stochastic seam changes: one change, measured on the seam's eval set, decided against the charter, the target and the best result. |
 
 ## edd: eval-driven development
@@ -23,10 +23,10 @@ Per project:
 
 ```bash
 mkdir -p evals && cp <a4a>/skills/edd/scripts/*.py evals/
-# per seam: evals/<seam>/charter.md, cases.jsonl, system.py, grader.py (see FORMAT.md)
+# per seam: evals/<seam>/charter.md, eval.md, cases.jsonl, system.py, grader.py (see FORMAT.md)
 python evals/run_evals.py --agree-budget 2.00 --note "ticket 12"        # the budget the user agreed
 EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --check            # free: checks and the estimate
-EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --target 0.80 --note "one change"
+EVAL_SET=cases.jsonl python evals/run_evals.py <seam> --note "one change"                # the target is in eval.md
 ```
 
 Nothing paid runs without approval: the runner refuses a run that would take the total past the agreed budget, and every run reports what it cost and the running total.

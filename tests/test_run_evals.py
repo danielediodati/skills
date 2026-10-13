@@ -126,6 +126,44 @@ class CoreThenExtended(unittest.TestCase):
         self.assertEqual(evals.calls(), ["core-1"])
 
 
+class TargetBesideTheEvalSet(unittest.TestCase):
+    def setUp(self):
+        self.evals = FakeEvals([case("core-1", [True], core=True), case("core-2", [False], core=True),
+                                case("ext-1", [True])])
+        self.addCleanup(self.evals.close)
+
+    def write_target(self, target: str) -> None:
+        (self.evals.seam / "eval.md").write_text(
+            f"# fake eval\n\n- Target: {target}\n- Good: the output is true.\n", encoding="utf-8")
+
+    def test_the_target_is_read_from_the_file_beside_the_eval_set(self):
+        self.write_target("0.80 on the dev split")
+        done = self.evals.run("fake", "--k", "1")
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("target 0.80: not met on the core set", done.stdout)
+        self.assertEqual(sorted(self.evals.calls()), ["core-1", "core-2"])
+
+    def test_a_run_with_no_target_anywhere_refuses_to_start_and_names_the_file(self):
+        done = self.evals.run("fake", "--k", "1")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("eval.md", done.stderr)
+        self.assertEqual(self.evals.calls(), [])
+
+    def test_a_file_with_no_target_line_refuses_to_start(self):
+        (self.evals.seam / "eval.md").write_text("# fake eval\n\n- Good: the output is true.\n", encoding="utf-8")
+        done = self.evals.run("fake", "--k", "1")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("eval.md", done.stderr)
+        self.assertEqual(self.evals.calls(), [])
+
+    def test_a_target_on_the_command_line_wins_and_the_report_says_so(self):
+        self.write_target("0.80")
+        done = self.evals.run("fake", "--target", "0.5", "--k", "1")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("target 0.50", done.stdout)
+        self.assertIn("eval.md says 0.80", done.stdout)
+
+
 def ten_cases() -> list[dict]:
     """Ten core cases. c0 fails its second run, so the first run of the seam scores 0.97 with spread 0.10."""
     return [case("c0", [True, False, True], core=True)] + [case(f"c{i}", [True], core=True) for i in range(1, 10)]

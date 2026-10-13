@@ -11,14 +11,7 @@ What is still undecided or undone. Decisions already taken are in `CONTEXT.md`; 
 
 Five arms on the same 24 trials (`trials/results-rule-only.md`, `results-auto-charter.md`, `results-practice-charter.md`): drift in 15 with nothing, 11 with the rule alone, 2 with a charter the agent wrote from the code as it is, 2 with one it wrote by its own rules, 0 with the user's. A line moved toward what the user wants in 8, 9, 6, 5 and 12.
 
-Decided by the user, to be written into the skills by ticket 3.4:
-
-- **The agent writes the charter alone.** It asks only on a serious doubt, otherwise nothing; with nobody to answer, it chooses and marks the line.
-- **The charter states the line as the code has it.** The user validated that brief (`trials/brief-auto-charter.md`) after trying the other: the agent reasoning by its own rules did no better and stopped more. The `charter` skill and session 4 use it as it is.
-- **A charter holds free, constrained and budget.** Target and eval direction move to the `eval` skill.
-- **`CONTEXT.md` decision 7 stands;** it could say who writes the charter. The rule `setup` writes loses "with the user" from "write one with the user first".
-
-Still open:
+What the user decided from them is in the `charter` skill and `CONTEXT.md` decision 7. Still open:
 
 - **The stiffness is not solved.** Either charter makes the agent stop on changes the user wants (10 and 13 stops in 24), because nobody told it which of today's behaviours are defects. Only the user's charter did, and no brief found a way around a person knowing what the seam is for.
 - **A charter that judges the code can be wrong the other way:** two of nine lines the agent marked as defects are things the user wants.

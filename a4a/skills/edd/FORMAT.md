@@ -15,6 +15,22 @@ The eval set: one JSON object per line. A run names it in the environment, `EVAL
 - `source`: where the case came from (a trace, a ticket, the spec, grilling). Cases born from real failures are the most valuable; keep the link back to them.
 - `tags`: failure categories and slices, so a run reports per-tag scores next to the total.
 
+## `evals/<seam>/eval.md`
+
+The seam's target and the direction of its eval set: the rules the cases and graders follow, not the cases themselves.
+
+```md
+# <seam> eval
+
+- Target: <score on the eval set, from 0 to 1>
+- Good: <what makes a free decision good>
+- Broken: <what violating each constraint looks like>
+- Cases come from: <sources, most valuable first>
+- Held-out axis: <what held-out cases differ on>
+```
+
+The runner reads the number that opens the `- Target:` line, e.g. `- Target: 0.80 on the held-out split`, and refuses to start without one. `--target` replaces it for one run, and the report says so. The target is a goal declared before the first run, which may show it was wrong; only the user sets or corrects it.
+
 ## `evals/<seam>/system.py` and `evals/<seam>/grader.py`
 
 The contract `run_evals.py` expects:

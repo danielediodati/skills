@@ -19,7 +19,7 @@ A **stochastic seam** is a point where a model decides: an agent, a router, a pr
 
    A stochastic seam is a point where a model decides: an agent, a router, a prompt, a model judge. Each has a charter at `evals/<seam>/charter.md`: what the model is free to decide, what code constrains, and why. Only the user changes a charter.
 
-   - Read a seam's charter before changing the seam. If it has none, write one with the user first (the `charter` skill does this).
+   - Read a seam's charter before changing the seam. If it has none, write one first (the `charter` skill does this).
    - A decision the charter lists as free stays with the model. A constant, a default, a closed menu, a fixed reply or a prompt that dictates the answer takes it over and moves the line. Criteria that inform the model's judgement do not.
    - A decision the charter lists as constrained stays in code. Asking the model to take it, or loosening the check, moves the line.
    - Never move a line, and never edit the charter, not even to record what you did. If the request cannot be met without moving a line, make the part that can be made, then stop: name the line, say what moving it would buy, and leave the decision to the user.

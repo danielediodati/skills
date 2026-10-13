@@ -18,6 +18,5 @@ Output: queue, urgency, a one-line summary and the hours to respond within
 - One model call sees the ticket, its body cut to a fixed cap (today 8000 characters); no chunking, no retry: merging several answers would decide in the model's place. The cap is a budget number and may be raised without moving the line.
 - The mechanical steps: a ticket with neither subject nor body raises `ValueError` before the model is called; the answer is read whatever its case, bold or list markers, the first occurrence of a field winning.
 
-## Target and budget
-- Target: 0.90 on `cases.jsonl`, the eval set next to this charter.
+## Budget
 - Budget: one model call per ticket, body up to the cap.

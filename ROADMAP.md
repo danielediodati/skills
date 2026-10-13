@@ -16,7 +16,6 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 Writing a charter for every seam is heavy, and no trial has run the rule in `AGENTS.md` without one. This session measures that arm before session 4 spends 144 more trials on the charter as it is. It did: the rule alone drifts in 11 of 24 trials, and the charter stays (`trials/results-rule-only.md`). A charter the agent writes alone from the code drifts in 2 of 24: the skill can draft it, and the user reviews what the code does not show (`trials/results-auto-charter.md`). Told to reason and write its own rules, the agent writes a charter that does no better and stops more (`trials/results-practice-charter.md`). The session ends with the `charter` skill rewritten as the trials say.
 
-4. **Rewrite the `charter` skill: the agent writes it alone.** The skill, one text with the trial brief - [ticket](docs/work/3-rule-only/issues/04-charter-skill.md)
 5. **Five defects of the eval runner.** Found by its first real use - [ticket](docs/work/3-rule-only/issues/05-edd-defects.md)
 6. **Empty the open points of what is not open.** Decision 2, an ADR, the plugin loaded, limits and parked items moved - [ticket](docs/work/3-rule-only/issues/06-housekeeping.md)
 

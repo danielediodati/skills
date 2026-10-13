@@ -34,7 +34,7 @@ Output: <what leaves>
 ## Constrained
 - <decision>: <what code fixes, and why>
 
-## Target and budget
+## Budget
 - Budget: <calls, seconds, cost or context, if any>
 ```
 
