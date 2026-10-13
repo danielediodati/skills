@@ -23,12 +23,12 @@ Five arms on the same 24 trials (`trials/results-rule-only.md`, `results-auto-ch
 Decided by the user, not yet written into the skills:
 
 - **The agent writes the charter alone.** It asks only on a serious doubt, otherwise nothing; with nobody to answer, it chooses and marks the line.
+- **The charter states the line as the code has it.** The user validated that brief (`trials/brief-auto-charter.md`) after trying the other: the agent reasoning by its own rules did no better and stopped more. The `charter` skill and session 4 use it as it is.
 - **A charter holds free, constrained and budget.** Target and eval direction move to the `eval` skill.
 - **`CONTEXT.md` decision 7 stands;** it could say who writes the charter. The rule `setup` writes loses "with the user" from "write one with the user first".
 
 Still open:
 
-- **Which brief the `charter` skill and session 4 use.** By the protocol the simpler one stays (the line as the code has it): the agent's own rules gave the same drift and no more of what the user wants. But the reasoning brief gave one thing the other did not, the `Assumed.` mark, which pointed at two of the four lines it got wrong. A simple brief with that mark is a mix no trial has run.
 - **The stiffness is not solved.** Either charter makes the agent stop on changes the user wants (10 and 13 stops in 24), because nobody told it which of today's behaviours are defects. Only the user's charter did, and no brief found a way around a person knowing what the seam is for.
 - **A charter that judges the code can be wrong the other way:** two of nine lines the agent marked as defects are things the user wants.
 - Not measured: a real seam spread over a project; how much several drafts of one seam differ (session 4); a draft reviewed by the user against a charter written with the user.
