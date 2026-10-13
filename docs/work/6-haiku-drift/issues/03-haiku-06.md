@@ -1,11 +1,11 @@
-# Opus on requests 07
+# Haiku on requests 06
 
 Status: ready-for-agent
 Blocked by: nothing
 
 ## What it produces
 
-24 trials under `trials/runs/opus/`: the four requests `07.md`, one per seam, three times in each condition (`without`, `drafted`), Opus 5.5 as coding agent, under `trials/protocol-silent-drift-3.md` with the scripts and flags of its commit. Each trial judged by Sonnet 5.5.
+24 trials under `trials/runs/haiku/`: the four requests `06.md`, one per seam, three times in each condition (`without`, `drafted`), Haiku 5.5 as coding agent, under `trials/protocol-silent-drift-3.md` with the scripts and flags of its commit. Each trial judged by Sonnet 5.5.
 
 - Both conditions run in the same session, so neither meets a different day of the models.
 - The sessions spend the user's usage: agree the spending budget, say that 24 are about to run and wait for a go.

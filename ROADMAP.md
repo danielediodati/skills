@@ -22,7 +22,7 @@ Writing a charter for every seam is heavy, and no trial has run the rule in `AGE
 
 ## Session 4 - `0.4.0` - How much does a charter change from one draft to the next?
 
-**Shows**: a table of 24 charters, three per seam from Sonnet and three from Opus, each written from the code with nobody to ask, read line by line against the user's: which lines every draft finds, which none does, which depend on the draft.
+**Shows**: a table of 24 charters, three per seam from Sonnet and three from Haiku, each written from the code with nobody to ask, read line by line against the user's: which lines every draft finds, which none does, which depend on the draft.
 
 Session 3 found that a charter Sonnet wrote alone from the code drifts in 2 of 24 trials, against 15 with no charter and 0 with the user's (`trials/results-auto-charter.md`). The user decided the published number is about that charter, the one the `charter` skill will ship. Session 3 had one draft per seam; this session writes the drafts the next two will use, freezes their protocol, and says what a draft can be trusted on before a trial is spent. No trial runs here.
 
@@ -41,18 +41,18 @@ Sixteen problem-only requests, three runs each, one draft per run, judged by Opu
 4. **Calibrate the judge of Sonnet's trials.** Eight trials, condition hidden - [ticket](docs/work/5-sonnet-drift/issues/04-calibration.md)
 5. **Sonnet's result, and its number in the README.** As the protocol's rule gives it - [ticket](docs/work/5-sonnet-drift/issues/05-results.md)
 
-## Session 6 - `0.6.0` - And a charter Opus wrote, its own?
+## Session 6 - `0.6.0` - And a charter Haiku wrote, its own?
 
-**Shows**: the README section with Opus's rate beside Sonnet's, each with its intervals, never compared with each other.
+**Shows**: the README section with Haiku's rate beside Sonnet's, each with its intervals, never compared with each other.
 
-The same protocol with Opus as agent and writer of its charters, judged by Sonnet. 96 new trials; no session of work runs more than 30.
+The same protocol with Haiku as agent and writer of its charters, judged by Sonnet. Haiku, not Opus: the user set Opus aside as an agent for its cost; it stays only as the judge of Sonnet's trials, where it is the judge already calibrated. 96 new trials; no session of work runs more than 30.
 
-1. **Opus on requests 04.** 24 trials - [ticket](docs/work/6-opus-drift/issues/01-opus-04.md)
-2. **Opus on requests 05.** 24 trials - [ticket](docs/work/6-opus-drift/issues/02-opus-05.md)
-3. **Opus on requests 06.** 24 trials - [ticket](docs/work/6-opus-drift/issues/03-opus-06.md)
-4. **Opus on requests 07.** 24 trials - [ticket](docs/work/6-opus-drift/issues/04-opus-07.md)
-5. **Calibrate the judge of Opus's trials.** Seven trials, condition hidden - [ticket](docs/work/6-opus-drift/issues/05-calibration.md)
-6. **Opus's result, and its number in the README.** As the protocol's rule gives it - [ticket](docs/work/6-opus-drift/issues/06-results.md)
+1. **Haiku on requests 04.** 24 trials - [ticket](docs/work/6-haiku-drift/issues/01-haiku-04.md)
+2. **Haiku on requests 05.** 24 trials - [ticket](docs/work/6-haiku-drift/issues/02-haiku-05.md)
+3. **Haiku on requests 06.** 24 trials - [ticket](docs/work/6-haiku-drift/issues/03-haiku-06.md)
+4. **Haiku on requests 07.** 24 trials - [ticket](docs/work/6-haiku-drift/issues/04-haiku-07.md)
+5. **Calibrate the judge of Haiku's trials.** Seven trials, condition hidden - [ticket](docs/work/6-haiku-drift/issues/05-calibration.md)
+6. **Haiku's result, and its number in the README.** As the protocol's rule gives it - [ticket](docs/work/6-haiku-drift/issues/06-results.md)
 
 ## Session 7 - `0.7.0` - Would the charter have stopped a drift that really happened?
 
