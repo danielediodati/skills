@@ -1,0 +1,110 @@
+--- a/README.md
++++ b/README.md
+@@ -26,4 +26,6 @@
+ # [ActionItem(task='Send the revised quote to Halden', owner='Ana Ruiz', due=date(2026, 3, 6))]
+ ```
+ 
++The list is capped at 10. `extract_action_items` returns only that list; to know whether the cap cut anything, call `extract_with_overflow`, which returns an `Extraction` with `items` (the capped list), `omitted` (the valid items the cap cut, in list order) and `complete` (`True` when nothing was cut). Show the user a warning, and the omitted items, whenever `complete` is `False`.
++
+ Run the tests from this directory with `python -m unittest`.
+--- a/seam.py
++++ b/seam.py
+@@ -41,6 +41,16 @@
+     due: Optional[date]
+ 
+ 
++@dataclass(frozen=True)
++class Extraction:
++    items: List[ActionItem]  # at most MAX_ITEMS, soonest deadline first
++    omitted: List[ActionItem]  # valid items cut by the cap, in list order
++
++    @property
++    def complete(self) -> bool:
++        return not self.omitted
++
++
+ def extract_action_items(
+     notes: str,
+     attendees: Sequence[str],
+@@ -53,9 +63,22 @@
+     that are not in the requested form are skipped, an owner who was not in
+     the meeting becomes None, and so does a deadline that is not a real date
+     or falls before the meeting.
++
++    The list holds at most MAX_ITEMS; use `extract_with_overflow` to learn
++    whether items were cut and which.
+     """
++    return extract_with_overflow(notes, attendees, meeting_date, model).items
++
++
++def extract_with_overflow(
++    notes: str,
++    attendees: Sequence[str],
++    meeting_date: date,
++    model: Callable[[str], str],
++) -> Extraction:
++    """Like `extract_action_items`, but also return the items the cap cut."""
+     if not notes.strip():
+-        return []
++        return Extraction([], [])
+ 
+     prompt = PROMPT.format(
+         meeting_date=meeting_date.isoformat(),
+@@ -85,7 +108,7 @@
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+-    return items[:MAX_ITEMS]
++    return Extraction(items[:MAX_ITEMS], items[MAX_ITEMS:])
+ 
+ 
+ def _key(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -1,7 +1,13 @@
+ import unittest
+ from datetime import date
+ 
+-from seam import MAX_ITEMS, MAX_TASK_CHARS, ActionItem, extract_action_items
++from seam import (
++    MAX_ITEMS,
++    MAX_TASK_CHARS,
++    ActionItem,
++    extract_action_items,
++    extract_with_overflow,
++)
+ 
+ ATTENDEES = ["Ana Ruiz", "Tom Becker", "Priya Raman"]
+ MEETING = date(2026, 3, 3)  # a Tuesday
+@@ -143,6 +149,31 @@
+         self.assertEqual(len(items), MAX_ITEMS)
+         self.assertEqual(items[0].task, "Urgent task")
+ 
++    def test_items_cut_by_the_cap_are_reported_not_lost(self):
++        lines = [f"Task {n} | Ana Ruiz | none" for n in range(MAX_ITEMS + 4)]
++        lines.append("Urgent task | Tom Becker | 2026-03-04")
++        result = extract_with_overflow(
++            "\n".join(lines), ATTENDEES, MEETING, FakeModel("\n".join(lines))
++        )
++        self.assertEqual(len(result.items), MAX_ITEMS)
++        self.assertEqual(len(result.omitted), 5)
++        self.assertFalse(result.complete)
++        self.assertEqual(
++            [item.task for item in result.omitted],
++            [f"Task {n}" for n in range(MAX_ITEMS - 1, MAX_ITEMS + 4)],
++        )
++
++    def test_nothing_omitted_when_the_list_fits(self):
++        result = extract_with_overflow(
++            NOTES, ATTENDEES, MEETING, FakeModel("Book the room | Tom Becker | none")
++        )
++        self.assertTrue(result.complete)
++        self.assertEqual(result.omitted, [])
++
++    def test_extract_action_items_still_returns_the_capped_list(self):
++        lines = [f"Task {n} | Ana Ruiz | none" for n in range(MAX_ITEMS + 4)]
++        self.assertEqual(len(run("\n".join(lines))), MAX_ITEMS)
++
+     def test_long_task_is_cut_at_a_word_boundary(self):
+         task = "Write up " + "the findings and " * 12 + "share them"
+         cut = run(f"{task} | Ana Ruiz | none")[0].task

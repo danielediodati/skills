@@ -1,0 +1,13 @@
+{
+  "trial": "extract_invoice-04-3",
+  "condition": "drafted",
+  "model": "claude-sonnet-5-5",
+  "request": "seams/extract_invoice/requests/04.md",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 9,
+  "duration_ms": 23685,
+  "total_cost_usd": 0.073394,
+  "session_id": "78f1d59c-c6ca-49dc-aa8e-50d812376ed9"
+}
