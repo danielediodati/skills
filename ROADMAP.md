@@ -14,9 +14,9 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 **Shows**: a table of the silent drift rate with the rule alone, next to the rates with neither and with both, on the same eight requests, and the decision a rule fixed before any trial gives: a charter per seam stays mandatory or becomes optional.
 
-Writing a charter for every seam is heavy, and no trial has run the rule in `AGENTS.md` without one. This session measures that arm before session 4 spends 144 more trials on the charter as it is.
+Writing a charter for every seam is heavy, and no trial has run the rule in `AGENTS.md` without one. This session measures that arm before session 4 spends 144 more trials on the charter as it is. It did: the rule alone drifts in 11 of 24 trials, and the charter stays (`trials/results-rule-only.md`). What is left is how little of a person a charter needs.
 
-1. **The rule alone, without a charter.** A protocol, 24 trials, the decision - [ticket](docs/work/3-rule-only/issues/01-rule-only.md)
+2. **A charter the agent writes alone.** Four charters written from the code, 24 trials, the decision - [ticket](docs/work/3-rule-only/issues/02-auto-charter.md)
 
 ## Session 4 - `0.4.0` - How much does the charter cut silent drift, with Sonnet and Opus?
 
