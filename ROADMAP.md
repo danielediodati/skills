@@ -16,7 +16,6 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 Session 3 found that a charter Sonnet wrote alone from the code drifts in 2 of 24 trials, against 15 with no charter and 0 with the user's (`trials/results-auto-charter.md`). The user decided the published number is about that charter, the one the `charter` skill will ship. Session 3 had one draft per seam; this session writes the drafts the next two will use, freezes their protocol, and says what a draft can be trusted on before a trial is spent. No trial runs here.
 
-2. **Read the 24 drafts against the user's charters.** Line by line - [ticket](docs/work/4-charter-drafts/issues/02-read-the-drafts.md)
 
 ## Session 5 - `0.5.0` - How much does a charter Sonnet wrote cut its silent drift?
 
