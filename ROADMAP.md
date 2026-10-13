@@ -10,12 +10,6 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.md` changes what a coding agent does when it works on a stochastic seam. This session tests it on atomic seams before any further skill is written. If ticket 5 finds drift in fewer than 12 of its 36 trials without a charter, the problem is residual and the session stops there.
 
-## Session 2 - `0.2.0` - `edd` on one seam, holding the target and the money
-
-**Shows**: a real `edd` run on `triage_ticket`: the spending budget agreed first, the core set before the extended, every approval with its running total, and the verdict against the target and the best result.
-
-`edd` still describes the plugin before session 1: model seams, a one-way rule, smoke and full runs, a baseline. This session rewrites it on `CONTEXT.md` and adds decision 14 on spending.
-
 ## Session 3 - `0.3.0` - Does the rule alone hold the line, without a charter?
 
 **Shows**: a table of the silent drift rate with the rule alone, next to the rates with neither and with both, on the same eight requests, and the decision a rule fixed before any trial gives: a charter per seam stays mandatory or becomes optional.

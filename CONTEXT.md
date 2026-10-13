@@ -89,7 +89,7 @@ a4a/skills/<skill>/SKILL.md
 | `setup` (the `AGENTS.md` rule, the seam inventory) | First draft. Untested. |
 | `charter` (grills the user and writes a seam charter) | First draft. Untested. |
 | `eval` (cases, graders, judge calibration; core and extended sets). Called for a new seam, or to redefine an eval set. | Planned. Today part of `edd`. |
-| `edd` (eval-driven development: one change, measure, decide; runs only when a stochastic seam changes) | Rewritten on this file in session 2. Untested. |
+| `edd` (eval-driven development: one change, measure, decide; runs only when a stochastic seam changes) | Rewritten on this file in session 2. Run once, on `triage_ticket` (`trials/results-edd-demo.md`). |
 | `budget`, `agent-topology`, `failure-triage`, `context-budget` | Candidates, after the first four hold. |
 
 A separate skill to verify an eval set, and one to review a diff for drift, were considered and dropped as not central.
