@@ -137,7 +137,7 @@ def judge(trial_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("condition", choices=("without", "with", "with-v2"))
+    parser.add_argument("condition", choices=("without", "with", "with-v2", "rule-only"))
     parser.add_argument("--model", choices=AGENTS, required=True, help="the coding agent whose trials are judged")
     parser.add_argument("--only", nargs="*", help="trial ids to judge")
     parser.add_argument("--parallel", type=int, default=4)

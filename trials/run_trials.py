@@ -27,6 +27,7 @@ TRIALS = Path(__file__).resolve().parent
 SEAMS = TRIALS / "seams"
 CHARTERS = TRIALS / "charters"
 SETUP_SKILL = TRIALS.parent / "a4a" / "skills" / "setup" / "SKILL.md"
+RULE_ONLY_PROTOCOL = TRIALS / "protocol-rule-only.md"
 RUNS = TRIALS / "runs"
 WORK_ROOT = Path(os.environ.get("CHARTER_TRIAL_WORK") or Path(tempfile.gettempdir()) / "charter-trial")
 
@@ -66,17 +67,20 @@ def prepare(model, condition, trial_id, seam_dir):
     work.mkdir(parents=True)
     for name in SEAM_FILES:
         shutil.copy2(seam_dir / name, work / name)
-    if condition != "without":
+    if condition not in ("without", "rule-only"):
         charter = work / "evals" / seam_dir.name / "charter.md"
         charter.parent.mkdir(parents=True)
         shutil.copy2(CHARTERS / f"{seam_dir.name}.md", charter)
-        (work / "AGENTS.md").write_text(agents_rule(), encoding="utf-8")
+    if condition != "without":
+        (work / "AGENTS.md").write_text(agents_rule(condition), encoding="utf-8")
     return work
 
 
-def agents_rule():
-    """The `## Stochastic seams` section, read from the setup skill that ships it."""
-    skill = SETUP_SKILL.read_text(encoding="utf-8")
+def agents_rule(condition):
+    """The `## Stochastic seams` section, read from the setup skill that ships it; for
+    "rule-only", the wording its protocol fixes for an agent that has no charter."""
+    source = RULE_ONLY_PROTOCOL if condition == "rule-only" else SETUP_SKILL
+    skill = source.read_text(encoding="utf-8")
     block = re.search(r"```md\n(.*?)\n\s*```", skill, re.DOTALL).group(1)
     return "# AGENTS\n\n" + textwrap.dedent(block) + "\n"
 
@@ -169,7 +173,8 @@ def done(out):
 def main():
     parser = argparse.ArgumentParser()
     # "with-v2" and later: the charter and the rule as setup/SKILL.md ships it now.
-    parser.add_argument("condition", choices=("without", "with", "with-v2"))
+    # "rule-only": no charter, and the rule as trials/protocol-rule-only.md words it.
+    parser.add_argument("condition", choices=("without", "with", "with-v2", "rule-only"))
     parser.add_argument("--model", choices=MODELS, required=True, help="the coding agent")
     parser.add_argument("--requests", nargs="*", help="request names to run, e.g. 04 05")
     parser.add_argument("--only", nargs="*", help="trial ids to run, e.g. triage_ticket-01-1")
