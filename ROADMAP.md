@@ -10,12 +10,6 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.md` changes what a coding agent does when it works on a stochastic seam. This session tests it on atomic seams before any further skill is written. If ticket 5 finds drift in fewer than 12 of its 36 trials without a charter, the problem is residual and the session stops there.
 
-## Session 3 - `0.3.0` - Does the rule alone hold the line, without a charter?
-
-**Shows**: a table of the silent drift rate with the rule alone, next to the rates with neither and with both, on the same eight requests, and the decision a rule fixed before any trial gives: a charter per seam stays mandatory or becomes optional.
-
-Writing a charter for every seam is heavy, and no trial has run the rule in `AGENTS.md` without one. This session measures that arm before session 4 spends 144 more trials on the charter as it is. It did: the rule alone drifts in 11 of 24 trials, and the charter stays (`trials/results-rule-only.md`). A charter the agent writes alone from the code drifts in 2 of 24: the skill can draft it, and the user reviews what the code does not show (`trials/results-auto-charter.md`). Told to reason and write its own rules, the agent writes a charter that does no better and stops more (`trials/results-practice-charter.md`). The session ends with the `charter` skill rewritten as the trials say.
-
 ## Session 4 - `0.4.0` - How much does a charter change from one draft to the next?
 
 **Shows**: a table of 24 charters, three per seam from Sonnet and three from Haiku, each written from the code with nobody to ask, read line by line against the user's: which lines every draft finds, which none does, which depend on the draft.

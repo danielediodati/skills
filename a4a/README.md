@@ -10,6 +10,12 @@ A coding agent working on a system where a model decides tends to move decisions
 | `charter` | When a seam has no charter, or you move its line between freedom and constraint. The agent writes it from the seam's code, with no interview. |
 | `edd` | When a stochastic seam changes: one change, measured on the seam's eval set, decided against the charter, the target and the best result. |
 
+## charter: the line of a seam, written down
+
+Ask for a seam's charter, or call `/a4a:charter <seam>`. The agent reads the seam's code, prompt and tests and writes `evals/<seam>/charter.md` in one pass, with no interview: every decision between the input and the output on one side, free or constrained, with its reason, and the seam's budget. It states the line as the code has it today and asks only on a serious doubt.
+
+Two things stay yours. A line you want and the code does not hold yet: add it, ending with `Not yet in code` and what the code does today. And moving a line: an agent that cannot meet a request without moving one stops and names it; when you say to move it, the charter is amended in the same change as the code.
+
 ## edd: eval-driven development
 
 | File | Content |
