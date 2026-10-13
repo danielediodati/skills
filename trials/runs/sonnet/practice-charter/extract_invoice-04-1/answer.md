@@ -1,0 +1,6 @@
+The prompt now tells the model to write quantities, unit prices and the total as plain decimals (dot as decimal separator, no thousands separators, no currency symbols), whatever convention the invoice uses. With that, "1.250,00 EUR" should come back as `1250.00` and "2.340,50" as `2340.50`. The tests pass, but I haven't run this against a real model with the Kessler or Cartiera Lombarda invoices.
+
+- **Cause:** the charter makes number normalization the model's job, but the prompt never asked for it. The code only runs `Decimal(str(value))`, so the model passed through "1.250,00" as printed and the code rejected it.
+- **Change:** in `seam.py`, the prompt now includes the plain-decimal instruction, with the two examples `"1.250,00 EUR"` → `1250.00` and `"1,234.50"` → `1234.50`. In `test.py`, I added a test that the prompt asks for plain decimals.
+- **Not done:** I didn't add a parser in code for European number formats. The charter assigns that reading to the model, and a code-side parser would take the decision away from it.
+- **Remaining risk:** the model is still the one deciding what "1.250" means. If it misreads an ambiguous figure, the total check will flag the invoice as `mismatch` for a clerk rather than load it silently.

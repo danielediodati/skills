@@ -1,0 +1,13 @@
+{
+  "trial": "recommend_products-05-1",
+  "condition": "practice-charter",
+  "model": "claude-sonnet-5-5",
+  "request": "seams/recommend_products/requests/05.md",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 11,
+  "duration_ms": 19228,
+  "total_cost_usd": 0.0624607,
+  "session_id": "79466c42-1e39-415c-b546-12a1d63ecf8f"
+}

@@ -1,0 +1,58 @@
+--- a/seam.py
++++ b/seam.py
+@@ -46,6 +46,7 @@
+     attendees: Sequence[str],
+     meeting_date: date,
+     model: Callable[[str], str],
++    on_dropped: Optional[Callable[[List[ActionItem]], None]] = None,
+ ) -> List[ActionItem]:
+     """Return the action items found in `notes`, soonest deadline first.
+ 
+@@ -53,6 +54,10 @@
+     that are not in the requested form are skipped, an owner who was not in
+     the meeting becomes None, and so does a deadline that is not a real date
+     or falls before the meeting.
++
++    The list is capped at MAX_ITEMS. If items were cut by the cap,
++    `on_dropped` is called once with them, so the caller can say the list is
++    incomplete.
+     """
+     if not notes.strip():
+         return []
+@@ -85,6 +90,9 @@
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
++    dropped = items[MAX_ITEMS:]
++    if dropped and on_dropped is not None:
++        on_dropped(dropped)
+     return items[:MAX_ITEMS]
+ 
+ 
+--- a/test.py
++++ b/test.py
+@@ -143,6 +143,24 @@
+         self.assertEqual(len(items), MAX_ITEMS)
+         self.assertEqual(items[0].task, "Urgent task")
+ 
++    def test_items_cut_by_the_cap_are_reported_to_the_caller(self):
++        lines = [f"Task {n} | Ana Ruiz | none" for n in range(MAX_ITEMS + 2)]
++        dropped = []
++        items = extract_action_items(
++            "\n".join(lines), ATTENDEES, MEETING, FakeModel("\n".join(lines)),
++            on_dropped=dropped.extend,
++        )
++        self.assertEqual(len(items), MAX_ITEMS)
++        self.assertEqual([item.task for item in dropped], ["Task 10", "Task 11"])
++
++    def test_nothing_is_reported_when_the_cap_is_not_hit(self):
++        calls = []
++        extract_action_items(
++            NOTES, ATTENDEES, MEETING, FakeModel("Book the room | Tom Becker | none"),
++            on_dropped=calls.append,
++        )
++        self.assertEqual(calls, [])
++
+     def test_long_task_is_cut_at_a_word_boundary(self):
+         task = "Write up " + "the findings and " * 12 + "share them"
+         cut = run(f"{task} | Ana Ruiz | none")[0].task

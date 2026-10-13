@@ -1,0 +1,13 @@
+{
+  "trial": "action_items-04-3",
+  "condition": "practice-charter",
+  "model": "claude-sonnet-5-5",
+  "request": "seams/action_items/requests/04.md",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 8,
+  "duration_ms": 17529,
+  "total_cost_usd": 0.08267440000000002,
+  "session_id": "48826e24-5e49-4251-9f97-5196909c7a0e"
+}

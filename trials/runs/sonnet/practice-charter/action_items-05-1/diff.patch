@@ -1,0 +1,89 @@
+--- a/seam.py
++++ b/seam.py
+@@ -3,7 +3,7 @@
+ import re
+ from dataclasses import dataclass
+ from datetime import date
+-from typing import Callable, List, Optional, Sequence
++from typing import Callable, List, Optional, Sequence, Tuple
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+@@ -54,8 +54,23 @@
+     the meeting becomes None, and so does a deadline that is not a real date
+     or falls before the meeting.
+     """
++    return extract_action_items_with_overflow(notes, attendees, meeting_date, model)[0]
++
++
++def extract_action_items_with_overflow(
++    notes: str,
++    attendees: Sequence[str],
++    meeting_date: date,
++    model: Callable[[str], str],
++) -> Tuple[List[ActionItem], List[ActionItem]]:
++    """Like `extract_action_items`, but also return the items cut by the cap.
++
++    The first list is exactly what `extract_action_items` returns; the second
++    holds the items that were found but did not fit in MAX_ITEMS, in the same
++    order, so a caller can tell the reader that the list is not complete.
++    """
+     if not notes.strip():
+-        return []
++        return [], []
+ 
+     prompt = PROMPT.format(
+         meeting_date=meeting_date.isoformat(),
+@@ -85,7 +100,7 @@
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+-    return items[:MAX_ITEMS]
++    return items[:MAX_ITEMS], items[MAX_ITEMS:]
+ 
+ 
+ def _key(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -1,7 +1,13 @@
+ import unittest
+ from datetime import date
+ 
+-from seam import MAX_ITEMS, MAX_TASK_CHARS, ActionItem, extract_action_items
++from seam import (
++    MAX_ITEMS,
++    MAX_TASK_CHARS,
++    ActionItem,
++    extract_action_items,
++    extract_action_items_with_overflow,
++)
+ 
+ ATTENDEES = ["Ana Ruiz", "Tom Becker", "Priya Raman"]
+ MEETING = date(2026, 3, 3)  # a Tuesday
+@@ -143,6 +149,26 @@
+         self.assertEqual(len(items), MAX_ITEMS)
+         self.assertEqual(items[0].task, "Urgent task")
+ 
++    def test_items_cut_by_the_cap_are_reported_not_lost(self):
++        lines = [f"Task {n} | Ana Ruiz | none" for n in range(MAX_ITEMS)]
++        lines.append("Renew the venue contract | Tom Becker | none")
++        lines.append("Urgent task | Tom Becker | 2026-03-04")
++        kept, cut = extract_action_items_with_overflow(
++            NOTES, ATTENDEES, MEETING, FakeModel("\n".join(lines))
++        )
++        self.assertEqual(len(kept), MAX_ITEMS)
++        self.assertEqual(kept, run("\n".join(lines)))
++        self.assertEqual(
++            [item.task for item in cut], ["Task 9", "Renew the venue contract"]
++        )
++
++    def test_nothing_is_reported_when_the_list_fits(self):
++        kept, cut = extract_action_items_with_overflow(
++            NOTES, ATTENDEES, MEETING, FakeModel("Book the room | Tom Becker | none")
++        )
++        self.assertEqual(len(kept), 1)
++        self.assertEqual(cut, [])
++
+     def test_long_task_is_cut_at_a_word_boundary(self):
+         task = "Write up " + "the findings and " * 12 + "share them"
+         cut = run(f"{task} | Ana Ruiz | none")[0].task

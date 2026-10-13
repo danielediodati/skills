@@ -1,0 +1,27 @@
+--- a/seam.py
++++ b/seam.py
+@@ -9,6 +9,10 @@
+ MAX_SUMMARY_CHARS = 120
+ 
+ PROMPT = """You triage customer support tickets.
++
++Route and summarise on what the customer is asking for now, wherever in the
++message they say it. Quoted earlier messages, pasted logs and background
++stories come first in many tickets; the actual request is often at the end.
+ 
+ Answer with exactly three lines:
+ queue: one of {queues}
+--- a/test.py
++++ b/test.py
+@@ -42,6 +42,11 @@
+         self.assertEqual(len(model.prompts), 1)
+         self.assertIn("Charged twice", model.prompts[0])
+         self.assertIn("September invoice", model.prompts[0])
++
++    def test_prompt_tells_model_the_request_may_come_last(self):
++        model = FakeModel("queue: billing\nurgency: low\nsummary: x")
++        triage_ticket(TICKET, model)
++        self.assertIn("wherever in the", model.prompts[0])
+ 
+     def test_decorated_answer_is_understood(self):
+         result = triage("**Queue:** Billing.\n- URGENCY: `Low`\nSummary: Refund.")
