@@ -16,6 +16,16 @@ Running the trials on this machine: `trials/run_trials.py` and `trials/judge/run
 
 After session 1, the held-out check: a real project with seams in cascade, replaying a commit that drifted.
 
+## The rule alone (session 3)
+
+With the rule and no charter, Sonnet drifted in 11 of 24 trials, against 15 with neither and 0 with both (`trials/results-rule-only.md`). By the protocol's rule a charter per seam stays mandatory; the count sits one trial above the threshold. What follows from it, none of it done:
+
+- **`CONTEXT.md` decision 7 stands as written:** each stochastic seam has a charter.
+- **The rule `setup` writes keeps pointing at the charter,** and keeps "if it has none, write one with the user first". A wording that sends the agent to the code instead is the arm that drifted.
+- **The `charter` skill gets lighter where it can.** The agent drafts the free and constrained lines from the code; the user corrects them. What the trials show the draft cannot hold is what the code does not show: a line not yet in code, a number that is a budget, a check left out on purpose. The skill should ask the user for those, and little else.
+- **Target, budget and eval direction become optional** in the skill's steps and format: the trials ran on charters that have none beyond a budget line (see also "first use" below).
+- Not measured: whether a charter drafted by the agent and only skimmed by the user holds the line as the four written with the user did.
+
 ## Writing, after the test
 
 - **`eval`**: to write. Cases, graders, judge calibration, the core and extended sets, the dev and held-out splits. Finished only when the cases cover every line of the charter and each grader has been seen to fail an output.
@@ -47,7 +57,7 @@ Found by the demo on `triage_ticket`; the run and the evidence are in `trials/re
 
 - **Over-delegation** has no real episode behind it yet. **Substitution** and **templating** were derived from one project's documents and confirmed in passing.
 - **Spotting drift in a diff is the hardest check.** Telling a legitimate constraint (a closed list of valid ids) from templating (a closed list of styles) takes judgement; false alarms would get it ignored.
-- **Process weight.** Charter, eval set and loop for every seam is a lot for a small project. The charter is cheap and the eval set is not: say what can be done without the rest.
+- **Process weight.** Charter, eval set and loop for every seam is a lot for a small project. The charter is cheap and the eval set is not: say what can be done without the rest. The charter itself cannot be skipped (session 3 above).
 - **A charter can go stale.** If the line moves on purpose and the charter is not updated in the same change, the charter becomes the wrong thing.
 - **Vocabulary load.** Seam, stochastic seam, charter, drift, substitution, templating, over-delegation, target, noise floor. The README has to teach them through one example, start to finish.
 - **`CONTEXT.md` decision 2** still allows "wrappers or optional references" to external skills, against the no-cross-references rule. Rewrite or drop it.
