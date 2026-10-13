@@ -16,6 +16,8 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 Writing a charter for every seam is heavy, and no trial has run the rule in `AGENTS.md` without one. This session measures that arm before session 4 spends 144 more trials on the charter as it is. It did: the rule alone drifts in 11 of 24 trials, and the charter stays (`trials/results-rule-only.md`). A charter the agent writes alone from the code drifts in 2 of 24: the skill can draft it, and the user reviews what the code does not show (`trials/results-auto-charter.md`).
 
+3. **A charter the agent writes by its own rules.** Four charters, 24 trials, the decision - [ticket](docs/work/3-rule-only/issues/03-practice-charter.md)
+
 ## Session 4 - `0.4.0` - How much does a charter change from one draft to the next?
 
 **Shows**: a table of 24 charters, three per seam from Sonnet and three from Opus, each written from the code with nobody to ask, read line by line against the user's: which lines every draft finds, which none does, which depend on the draft.

@@ -101,6 +101,16 @@ class TrialDirectory(unittest.TestCase):
         self.assertIn("Read a seam's charter before changing the seam", rule)
 
 
+    def test_practice_charter_has_its_own_charter_and_the_rule_of_its_protocol(self):
+        self.runner.CHARTERS_PRACTICE = Path(self._tmp.name) / "charters-practice"
+        self.runner.CHARTERS_PRACTICE.mkdir()
+        (self.runner.CHARTERS_PRACTICE / "triage_ticket.md").write_text("by the practices", encoding="utf-8")
+        work = self.prepare("practice-charter")
+        charter = work / "evals" / "triage_ticket" / "charter.md"
+        self.assertEqual(charter.read_text(encoding="utf-8"), "by the practices")
+        self.assertEqual(self.runner.agents_rule("practice-charter"), self.runner.agents_rule("auto-charter"))
+
+
 class CharterWriter(unittest.TestCase):
     """What the agent that writes a charter finds in its directory."""
 
@@ -114,6 +124,16 @@ class CharterWriter(unittest.TestCase):
             self.assertEqual((work / "brief.md").read_text(encoding="utf-8"),
                              (TRIALS / "brief-auto-charter.md").read_text(encoding="utf-8"))
 
+    def test_the_practice_kind_gets_the_brief_with_the_practices(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = load(WRITE_CHARTERS)
+            writer.WORK_ROOT = Path(tmp)
+            work = writer.prepare(SEAM, "practice")
+            self.assertEqual({p.relative_to(work).as_posix() for p in work.rglob("*")},
+                             {"brief.md", "seam.py", "test.py", "README.md"})
+            self.assertEqual((work / "brief.md").read_text(encoding="utf-8"),
+                             (TRIALS / "brief-practice-charter.md").read_text(encoding="utf-8"))
+
 
 class CommandLine(unittest.TestCase):
     """Both scripts take the condition; nothing matches the trial id, so nothing runs."""
@@ -124,13 +144,13 @@ class CommandLine(unittest.TestCase):
         self.runs = Path(self._tmp.name)
 
     def test_the_runner_takes_every_condition(self):
-        for condition in ("without", "with-v2", "rule-only", "auto-charter"):
+        for condition in ("without", "with-v2", "rule-only", "auto-charter", "practice-charter"):
             done = command(RUN_TRIALS, condition, "--model", "sonnet", "--only", "none",
                            "--runs", str(self.runs))
             self.assertEqual((done.returncode, done.stdout.strip()), (0, "0 trials to run"), done.stderr)
 
     def test_the_judge_takes_every_condition(self):
-        for condition in ("without", "with-v2", "rule-only", "auto-charter"):
+        for condition in ("without", "with-v2", "rule-only", "auto-charter", "practice-charter"):
             (self.runs / "sonnet" / condition).mkdir(parents=True)
             done = command(RUN_JUDGE, condition, "--model", "sonnet", "--runs", str(self.runs))
             self.assertEqual((done.returncode, done.stdout.strip()), (0, "0 trials to judge"), done.stderr)
