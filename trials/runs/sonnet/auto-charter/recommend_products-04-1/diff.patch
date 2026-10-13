@@ -1,0 +1,28 @@
+--- a/seam.py
++++ b/seam.py
+@@ -8,6 +8,11 @@
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
++
++Each reason is shown to the customer next to the product's real price and rating
++from the list below. A reason must agree with those figures: do not state or imply
++a price or rating the product does not have, and do not claim it is the cheapest,
++the best rated or similar unless the list shows that it is.
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}
+--- a/test.py
++++ b/test.py
+@@ -41,6 +41,11 @@
+         self.assertEqual(len(model.prompts), 1)
+         self.assertIn("searched for: noise cancelling\n", model.prompts[0])
+         self.assertIn("H-100 | Aria wireless headphones | 129.00 | 4.7", model.prompts[0])
++
++    def test_prompt_tells_the_model_reasons_must_agree_with_the_shown_figures(self):
++        model = FakeModel("H-100 | Best sound")
++        recommend_products("headphones", CATALOG, model)
++        self.assertIn("must agree with those figures", model.prompts[0])
+ 
+     def test_out_of_stock_products_are_not_offered_to_the_model(self):
+         model = FakeModel("H-100 | Best sound")

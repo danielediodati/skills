@@ -1,0 +1,81 @@
+--- a/seam.py
++++ b/seam.py
+@@ -41,13 +41,35 @@
+     due: Optional[date]
+ 
+ 
++class ActionItemList(List[ActionItem]):
++    """The capped follow-up list, plus whatever the cap left out.
++
++    Behaves as a plain list of at most MAX_ITEMS items. `omitted` holds the
++    items that were found but cut, in list order, so a short list can be told
++    apart from a complete one.
++    """
++
++    omitted: List[ActionItem]
++
++    def __init__(self, items=(), omitted=()):
++        super().__init__(items)
++        self.omitted = list(omitted)
++
++    @property
++    def truncated(self) -> bool:
++        return bool(self.omitted)
++
++
+ def extract_action_items(
+     notes: str,
+     attendees: Sequence[str],
+     meeting_date: date,
+     model: Callable[[str], str],
+-) -> List[ActionItem]:
++) -> ActionItemList:
+     """Return the action items found in `notes`, soonest deadline first.
++
++    At most MAX_ITEMS are in the list itself; any further items found are in
++    its `omitted` attribute (`truncated` is True when there are some).
+ 
+     `model` takes a prompt and returns text. Its answer is not trusted: lines
+     that are not in the requested form are skipped, an owner who was not in
+@@ -55,7 +77,7 @@
+     or falls before the meeting.
+     """
+     if not notes.strip():
+-        return []
++        return ActionItemList()
+ 
+     prompt = PROMPT.format(
+         meeting_date=meeting_date.isoformat(),
+@@ -85,7 +107,7 @@
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+-    return items[:MAX_ITEMS]
++    return ActionItemList(items[:MAX_ITEMS], items[MAX_ITEMS:])
+ 
+ 
+ def _key(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -143,6 +143,21 @@
+         self.assertEqual(len(items), MAX_ITEMS)
+         self.assertEqual(items[0].task, "Urgent task")
+ 
++    def test_items_cut_by_the_cap_are_reported_not_lost(self):
++        lines = [f"Task {n} | Ana Ruiz | none" for n in range(MAX_ITEMS + 2)]
++        lines.append("Urgent task | Tom Becker | 2026-03-04")
++        items = run("\n".join(lines))
++        self.assertTrue(items.truncated)
++        self.assertEqual(
++            [item.task for item in items.omitted],
++            [f"Task {n}" for n in range(MAX_ITEMS - 1, MAX_ITEMS + 2)],
++        )
++
++    def test_short_list_is_not_flagged_as_truncated(self):
++        items = run("Book the room | Tom Becker | none")
++        self.assertFalse(items.truncated)
++        self.assertEqual(items.omitted, [])
++
+     def test_long_task_is_cut_at_a_word_boundary(self):
+         task = "Write up " + "the findings and " * 12 + "share them"
+         cut = run(f"{task} | Ana Ruiz | none")[0].task

@@ -1,0 +1,52 @@
+--- a/seam.py
++++ b/seam.py
+@@ -5,7 +5,7 @@
+ QUEUES = ("billing", "technical", "account", "shipping", "general")
+ URGENCIES = ("low", "normal", "high", "urgent")
+ RESPOND_WITHIN_HOURS = {"low": 72, "normal": 24, "high": 8, "urgent": 1}
+-MAX_BODY_CHARS = 2000
++MAX_BODY_CHARS = 20000
+ MAX_SUMMARY_CHARS = 120
+ 
+ PROMPT = """You triage customer support tickets.
+@@ -14,6 +14,11 @@
+ queue: one of {queues}
+ urgency: one of {urgencies}
+ summary: one sentence saying what the customer needs
++
++Judge the ticket by what the customer is asking for now, wherever in the
++message that appears. It may come after quoted earlier messages, a pasted log
++or a long account of events, and may differ from the subject line or from the
++topic of the quoted thread.
+ 
+ Subject: {subject}
+ 
+--- a/test.py
++++ b/test.py
+@@ -1,6 +1,6 @@
+ import unittest
+ 
+-from seam import triage_ticket
++from seam import MAX_BODY_CHARS, triage_ticket
+ 
+ 
+ class FakeModel:
+@@ -82,9 +82,16 @@
+         self.assertTrue(result["summary"].startswith("a b ccc"))
+         self.assertEqual(len(result["summary"]), 120)
+ 
+-    def test_only_the_start_of_a_long_body_is_sent(self):
++    def test_request_after_a_long_quoted_thread_reaches_the_model(self):
++        model = FakeModel("queue: billing\nurgency: high\nsummary: x")
++        quoted = "> Please update my delivery address.\n" * 80
++        self.assertGreater(len(quoted), 2000)
++        triage_ticket({"subject": "Re: Address", "body": quoted + "I was charged 1480 EUR"}, model)
++        self.assertIn("charged 1480 EUR", model.prompts[0])
++
++    def test_body_beyond_the_budget_is_not_sent(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")
+-        triage_ticket({"subject": "Hi", "body": "x" * 2000 + "TAIL"}, model)
++        triage_ticket({"subject": "Hi", "body": "x" * MAX_BODY_CHARS + "TAIL"}, model)
+         self.assertNotIn("TAIL", model.prompts[0])
+ 
+     def test_empty_ticket_is_refused_before_asking_the_model(self):

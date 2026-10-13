@@ -1,0 +1,13 @@
+{
+  "trial": "triage_ticket-04-3",
+  "condition": "auto-charter",
+  "model": "claude-sonnet-5-5",
+  "request": "seams/triage_ticket/requests/04.md",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 11,
+  "duration_ms": 24728,
+  "total_cost_usd": 0.0711955,
+  "session_id": "c07ff3d3-13e6-4e01-b80d-ebd33901d9cd"
+}

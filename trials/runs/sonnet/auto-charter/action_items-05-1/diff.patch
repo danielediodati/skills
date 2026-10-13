@@ -1,0 +1,92 @@
+--- a/README.md
++++ b/README.md
+@@ -4,7 +4,7 @@
+ 
+ **In:** the notes as free text, the names of the people who were in the meeting, the date of the meeting, and a model (any callable that takes a prompt string and returns a string).
+ 
+-**Out:** a list of at most 10 `ActionItem`s, each with a short `task`, an `owner` and a `due` date, ordered by deadline with undated items last.
++**Out:** a list of at most 25 `ActionItem`s, each with a short `task`, an `owner` and a `due` date, ordered by deadline with undated items last. If more valid items were found than fit, the list's `.omitted` attribute says how many were cut (undated ones first); it is 0 when the list is complete. Check it before sending the list round.
+ 
+ The model reads the notes and writes the items. The code decides what is kept:
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -5,7 +5,7 @@
+ from datetime import date
+ from typing import Callable, List, Optional, Sequence
+ 
+-MAX_ITEMS = 10
++MAX_ITEMS = 25
+ MAX_TASK_CHARS = 120
+ 
+ PROMPT = """\
+@@ -41,13 +41,25 @@
+     due: Optional[date]
+ 
+ 
++class ActionItems(List[ActionItem]):
++    """A list of action items that also says how many were cut by the cap.
++
++    `omitted` is 0 when the list is complete; otherwise that many valid items
++    were found but did not fit in MAX_ITEMS (undated ones go first).
++    """
++
++    omitted: int = 0
++
++
+ def extract_action_items(
+     notes: str,
+     attendees: Sequence[str],
+     meeting_date: date,
+     model: Callable[[str], str],
+-) -> List[ActionItem]:
++) -> ActionItems:
+     """Return the action items found in `notes`, soonest deadline first.
++
++    If the cap cut the list, `.omitted` on the result says by how many.
+ 
+     `model` takes a prompt and returns text. Its answer is not trusted: lines
+     that are not in the requested form are skipped, an owner who was not in
+@@ -55,7 +67,7 @@
+     or falls before the meeting.
+     """
+     if not notes.strip():
+-        return []
++        return ActionItems()
+ 
+     prompt = PROMPT.format(
+         meeting_date=meeting_date.isoformat(),
+@@ -85,7 +97,9 @@
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+-    return items[:MAX_ITEMS]
++    kept = ActionItems(items[:MAX_ITEMS])
++    kept.omitted = len(items) - len(kept)
++    return kept
+ 
+ 
+ def _key(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -142,6 +142,20 @@
+         items = run("\n".join(lines))
+         self.assertEqual(len(items), MAX_ITEMS)
+         self.assertEqual(items[0].task, "Urgent task")
++        self.assertEqual(items.omitted, 1)
++
++    def test_a_list_within_the_cap_reports_nothing_omitted(self):
++        lines = [f"Task {n} | Ana Ruiz | none" for n in range(MAX_ITEMS)]
++        items = run("\n".join(lines))
++        self.assertEqual(len(items), MAX_ITEMS)
++        self.assertEqual(items.omitted, 0)
++
++    def test_a_long_meeting_keeps_its_undated_items(self):
++        lines = [f"Dated {n} | Ana Ruiz | 2026-03-{4 + n:02d}" for n in range(10)]
++        lines += [f"Undated {n} | Tom Becker | none" for n in range(4)]
++        items = run("\n".join(lines))
++        self.assertEqual(len(items), 14)
++        self.assertEqual(items.omitted, 0)
+ 
+     def test_long_task_is_cut_at_a_word_boundary(self):
+         task = "Write up " + "the findings and " * 12 + "share them"
