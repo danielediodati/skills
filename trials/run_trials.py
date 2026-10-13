@@ -27,7 +27,9 @@ TRIALS = Path(__file__).resolve().parent
 SEAMS = TRIALS / "seams"
 CHARTERS = TRIALS / "charters"
 SETUP_SKILL = TRIALS.parent / "a4a" / "skills" / "setup" / "SKILL.md"
+CHARTERS_AUTO = TRIALS / "charters-auto"  # written by an agent from the code, read by nobody
 RULE_ONLY_PROTOCOL = TRIALS / "protocol-rule-only.md"
+AUTO_CHARTER_PROTOCOL = TRIALS / "protocol-auto-charter.md"
 RUNS = TRIALS / "runs"
 WORK_ROOT = Path(os.environ.get("CHARTER_TRIAL_WORK") or Path(tempfile.gettempdir()) / "charter-trial")
 
@@ -68,9 +70,10 @@ def prepare(model, condition, trial_id, seam_dir):
     for name in SEAM_FILES:
         shutil.copy2(seam_dir / name, work / name)
     if condition not in ("without", "rule-only"):
+        charters = CHARTERS_AUTO if condition == "auto-charter" else CHARTERS
         charter = work / "evals" / seam_dir.name / "charter.md"
         charter.parent.mkdir(parents=True)
-        shutil.copy2(CHARTERS / f"{seam_dir.name}.md", charter)
+        shutil.copy2(charters / f"{seam_dir.name}.md", charter)
     if condition != "without":
         (work / "AGENTS.md").write_text(agents_rule(condition), encoding="utf-8")
     return work
@@ -78,8 +81,8 @@ def prepare(model, condition, trial_id, seam_dir):
 
 def agents_rule(condition):
     """The `## Stochastic seams` section, read from the setup skill that ships it; for
-    "rule-only", the wording its protocol fixes for an agent that has no charter."""
-    source = RULE_ONLY_PROTOCOL if condition == "rule-only" else SETUP_SKILL
+    "rule-only" and "auto-charter", the wording their protocols fix."""
+    source = {"rule-only": RULE_ONLY_PROTOCOL, "auto-charter": AUTO_CHARTER_PROTOCOL}.get(condition, SETUP_SKILL)
     skill = source.read_text(encoding="utf-8")
     block = re.search(r"```md\n(.*?)\n\s*```", skill, re.DOTALL).group(1)
     return "# AGENTS\n\n" + textwrap.dedent(block) + "\n"
@@ -174,7 +177,8 @@ def main():
     parser = argparse.ArgumentParser()
     # "with-v2" and later: the charter and the rule as setup/SKILL.md ships it now.
     # "rule-only": no charter, and the rule as trials/protocol-rule-only.md words it.
-    parser.add_argument("condition", choices=("without", "with", "with-v2", "rule-only"))
+    # "auto-charter": a charter from trials/charters-auto/, and the rule as its protocol words it.
+    parser.add_argument("condition", choices=("without", "with", "with-v2", "rule-only", "auto-charter"))
     parser.add_argument("--model", choices=MODELS, required=True, help="the coding agent")
     parser.add_argument("--requests", nargs="*", help="request names to run, e.g. 04 05")
     parser.add_argument("--only", nargs="*", help="trial ids to run, e.g. triage_ticket-01-1")
