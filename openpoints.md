@@ -8,7 +8,7 @@ The decisions taken are in `CONTEXT.md`, numbered 1 to 14.
 
 ## The test that gated everything else
 
-Session 1 (`trials/results.md`) showed the charter and the rule change what a coding agent does, so the remaining skills are worth writing. What it asked of `edd` is planned in session 3; the `charter` skill could also name the drift agents do not see as a move (input cleaned by code before the model reads it, a parsing rule that also catches a free field, a missing field defaulted instead of refused).
+Session 1 (`trials/results.md`) showed the charter and the rule change what a coding agent does, so the remaining skills are worth writing. What it asked of `edd` is planned in session 2; the `charter` skill could also name the drift agents do not see as a move (input cleaned by code before the model reads it, a parsing rule that also catches a free field, a missing field defaulted instead of refused).
 
 Still to check outside that session: load the plugin in a session (`claude --plugin-dir <repo>/a4a`) and see the skills appear. Only the manifests have been validated so far.
 
@@ -31,7 +31,7 @@ After session 1, the held-out check: a real project with seams in cascade, repla
 - **"The line moves only when the user decides it" names no one at run time.** Once the charter is written, only code, model and coding agent are left. The skill should say the charter is where the decision lives, and that an agent who cannot meet a request without moving a line stops and says so (the `setup` rule above).
 - **A line the code does not yet hold.** The user put two decisions on the constrained side that the code does not apply (ISO currency list, VAT as a separate field). The format has no place for that; `extract_invoice` marks them "Not yet in code".
 
-## `edd`, first real run (ticket 3.6)
+## `edd`, first real run (the demo of session 2)
 
 Found by the demo on `triage_ticket`; the run and the evidence are in `trials/results-edd-demo.md`.
 
