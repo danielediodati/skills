@@ -24,7 +24,17 @@ With the rule and no charter, Sonnet drifted in 11 of 24 trials, against 15 with
 - **The rule `setup` writes keeps pointing at the charter,** and keeps "if it has none, write one with the user first". A wording that sends the agent to the code instead is the arm that drifted.
 - **The `charter` skill gets lighter where it can.** The agent drafts the free and constrained lines from the code; the user corrects them. What the trials show the draft cannot hold is what the code does not show: a line not yet in code, a number that is a budget, a check left out on purpose. The skill should ask the user for those, and little else.
 - **Target, budget and eval direction become optional** in the skill's steps and format: the trials ran on charters that have none beyond a budget line (see also "first use" below).
-- Not measured: whether a charter drafted by the agent and only skimmed by the user holds the line as the four written with the user did.
+- Measured next, below: a charter the agent drafts and nobody reads.
+
+## A charter the agent writes alone (session 3)
+
+Four charters written by Sonnet from the code, read by nobody: 2 of 24 trials drifted, against 11 with the rule alone and 0 with the user's charters (`trials/results-auto-charter.md`). By the protocol's rule the `charter` skill drafts alone and the user's part becomes a review. None of what follows is done:
+
+- **The `charter` skill changes shape:** the agent reads the seam and writes the whole charter, then shows it. No grilling round per decision.
+- **The review has one job, and the skill should say it:** what the code does not show. The draft got 44 of the user's 54 lines right and wrote all 6 "Not yet in code" lines as the code has them, twice giving a defect a reason ("by design"). So the skill asks the user, per constrained line, "wanted, or only how it is today?", and per number, "the constraint, or today's value of a budget?".
+- **An unreviewed draft is safe and stiff.** It does not let the line drift; it makes the agent stop on changes the user wants (10 stops in 24, and half as many changes toward the user's line). A draft could ship marked as unreviewed, so that a stop on one of its lines says so.
+- **`CONTEXT.md` decision 7 stands,** and could say who writes the charter: the agent, with the user reviewing.
+- Not measured: a real seam spread over a project; how much four more drafts of the same seams would differ; a reviewed draft against a charter written with the user.
 
 ## Writing, after the test
 
