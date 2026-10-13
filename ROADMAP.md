@@ -14,9 +14,7 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 **Shows**: a table of the silent drift rate with the rule alone, next to the rates with neither and with both, on the same eight requests, and the decision a rule fixed before any trial gives: a charter per seam stays mandatory or becomes optional.
 
-Writing a charter for every seam is heavy, and no trial has run the rule in `AGENTS.md` without one. This session measures that arm before session 4 spends 144 more trials on the charter as it is. It did: the rule alone drifts in 11 of 24 trials, and the charter stays (`trials/results-rule-only.md`). A charter the agent writes alone from the code drifts in 2 of 24: the skill can draft it, and the user reviews what the code does not show (`trials/results-auto-charter.md`).
-
-3. **A charter the agent writes by its own rules.** Four charters, 24 trials, the decision - [ticket](docs/work/3-rule-only/issues/03-practice-charter.md)
+Writing a charter for every seam is heavy, and no trial has run the rule in `AGENTS.md` without one. This session measures that arm before session 4 spends 144 more trials on the charter as it is. It did: the rule alone drifts in 11 of 24 trials, and the charter stays (`trials/results-rule-only.md`). A charter the agent writes alone from the code drifts in 2 of 24: the skill can draft it, and the user reviews what the code does not show (`trials/results-auto-charter.md`). Told to reason and write its own rules, the agent writes a charter that does no better and stops more (`trials/results-practice-charter.md`).
 
 ## Session 4 - `0.4.0` - How much does a charter change from one draft to the next?
 
