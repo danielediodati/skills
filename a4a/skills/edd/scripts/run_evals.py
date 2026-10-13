@@ -5,10 +5,11 @@ Copy into <project>/evals/ next to judge.py and calibrate.py. Layout, relative t
 
     <seam>/<eval set>    one case per line (FORMAT.md), named by the EVAL_SET environment variable
     <seam>/system.py     run(case_input) -> {"output": ..., "tokens"?: int, "seconds"?: float, "cost"?: float}
-                         constants MODEL, PROVIDER and COST_PER_CASE (dollars per call, 0 when free)
+                         constants MODEL, PROVIDER and COST_PER_CASE (dollars per call, 0 when free);
+                         --model sets MODEL before the first call, so run() reads it when it calls
     <seam>/grader.py     grade(case, result) -> bool, or float in [0, 1] passing at >= 0.5
     <seam>/eval.md       the seam's target, on a line "- Target: 0.80" (FORMAT.md)
-    <seam>/runs/         written here: one JSON per run
+    <seam>/runs/         written here: one JSON per run, with what the seam answered
     <seam>/best.json     written here: the best result of each model on each split
     log.md               written here: one row per run
     spending.json        written here: the spending budget agreed with the user, and what is spent
@@ -21,6 +22,8 @@ The extended run is judged as decisions 12 and 13 say. Below the target: failure
 Below this model's best result by more than the run-to-run spread: a warning. Best results are
 kept per model with the code version they were measured on; a change to the grader or the eval
 set discards them, a change to the code keeps them, marked as measured on an earlier version.
+A case's tags are not part of the eval set for this: editing them discards nothing. A run below
+the target is recorded and never kept as a best result.
 
 Nothing paid runs without approval (decision 14). The user agrees a spending budget for the
 ticket first (--agree-budget). A run whose estimated cost, core and extended sets together, would
@@ -78,8 +81,17 @@ def load_module(path: Path, name: str):
 
 
 def file_hash(path: Path) -> str:
-    """Short content hash, used to detect a grader or eval set changed since the best results."""
+    """Short content hash, used to detect a grader changed since the best results."""
     return hashlib.sha256(path.read_bytes()).hexdigest()[:12] if path.exists() else "-"
+
+
+def eval_set_hash(path: Path) -> str:
+    """Short hash of what the eval set measures: every case, without its tags. Tags describe a case
+    (a failure category, a slice) and do not change it, so editing them discards no best result."""
+    cases = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    for c in cases:
+        c.pop("tags", None)
+    return hashlib.sha256(json.dumps(cases, sort_keys=True).encode("utf-8")).hexdigest()[:12]
 
 
 def git_commit(root: Path) -> str:
@@ -172,17 +184,19 @@ def read_target(seam_dir: Path) -> float | None:
 def run_case(case: dict, system, grader, k: int, per_call: float) -> dict:
     """Run one case k times. A run passes when the grader says so; the case when most runs pass.
     A call costs what the adapter reports, else the estimate per call."""
-    outcomes, tokens, seconds, errors, cost = [], [], [], [], 0.0
+    outcomes, outputs, tokens, seconds, errors, cost = [], [], [], [], [], 0.0
     for _ in range(k):
         start = time.perf_counter()
         try:
             result = system.run(case["input"])
         except Exception as exc:  # a crash of the system is a failed run, and may still be paid
             outcomes.append(False)
+            outputs.append(None)
             errors.append(f"system: {type(exc).__name__}: {exc}")
             cost += per_call
             continue
         cost += result["cost"] if result.get("cost") is not None else per_call
+        outputs.append(result.get("output"))
         seconds.append(result.get("seconds", time.perf_counter() - start))
         if result.get("tokens") is not None:
             tokens.append(result["tokens"])
@@ -197,6 +211,7 @@ def run_case(case: dict, system, grader, k: int, per_call: float) -> dict:
         "id": case["id"],
         "tags": case.get("tags", []),
         "outcomes": outcomes,
+        "outputs": outputs,  # what the seam answered, run by run: failures are read without paying again
         "passed": sum(outcomes) > k / 2,
         "tokens": sum(tokens) / len(tokens) if tokens else None,
         "seconds": sum(seconds) / len(seconds) if seconds else None,
@@ -234,8 +249,19 @@ def agree_budget(root: Path, budget: float, note: str) -> int:
         spending = {"note": note, "spent": 0.0, "runs": []}
     spending.update(budget=budget, agreed=datetime.now().isoformat(timespec="seconds"))
     (root / SPENDING).write_text(json.dumps(spending, indent=1), encoding="utf-8")
-    print(f"spending budget ${budget:.2f} agreed; {fmt_total(spending)}")
+    print(f"spending budget {money(budget)} agreed; {fmt_total(spending)}")
     return 0
+
+
+def money(dollars: float) -> str:
+    """Dollars to the cent, and a small amount to its two leading digits: half a cent reads $0.005,
+    never $0.00."""
+    if dollars <= 0 or dollars >= 0.1:
+        return f"${dollars:.2f}"
+    text = f"{dollars:.{1 - math.floor(math.log10(dollars))}f}"
+    while text.endswith("0") and len(text.partition(".")[2]) > 2:
+        text = text[:-1]
+    return f"${text}"
 
 
 def fmt_total(spending: dict | None) -> str:
@@ -243,7 +269,7 @@ def fmt_total(spending: dict | None) -> str:
     if spending is None:
         return "no spending budget agreed"
     agreed_for = f" agreed for {spending['note']}" if spending.get("note") else ""
-    return f"spent ${spending['spent']:.2f} of ${spending['budget']:.2f}{agreed_for}"
+    return f"spent {money(spending['spent'])} of {money(spending['budget'])}{agreed_for}"
 
 
 def refusal(spending: dict | None, estimate: float, what: str) -> str | None:
@@ -251,10 +277,10 @@ def refusal(spending: dict | None, estimate: float, what: str) -> str | None:
     if estimate <= 0:
         return None
     if spending is None:
-        return (f"{what} would cost about ${estimate:.2f} and no spending budget is agreed: agree one "
+        return (f"{what} would cost about {money(estimate)} and no spending budget is agreed: agree one "
                 f"with the user, then run --agree-budget <dollars>")
     if spending["spent"] + estimate > spending["budget"] + 1e-9:
-        return (f"{what} would cost about ${estimate:.2f}; {fmt_total(spending)}: it would pass the "
+        return (f"{what} would cost about {money(estimate)}; {fmt_total(spending)}: it would pass the "
                 f"budget. Ask the user before anything else is paid")
     return None
 
@@ -345,11 +371,11 @@ def save_run(root: Path, runs_dir: Path, settings: dict, which: str, results: li
     run = {"run_id": run_id, **settings, "set": which, "note": notes,
            "per_run": per_run, "score": score, "cost": cost, "results": results}
     runs_dir.mkdir(parents=True, exist_ok=True)
-    (runs_dir / f"{run_id}.json").write_text(json.dumps(run, indent=1), encoding="utf-8")
+    (runs_dir / f"{run_id}.json").write_text(json.dumps(run, indent=1, default=repr), encoding="utf-8")
     append_log(root, [now.strftime("%Y-%m-%d"), settings["commit"], settings["seam"], settings["eval_set"],
                       settings["model"], settings["provider"], settings["split"], which, settings["k"],
-                      f"{score:.2f}", spread(per_run), paired, fmt_cost(results), f"${cost:.2f}",
-                      "-" if spent is None else f"${spent:.2f}", notes or "-"])
+                      f"{score:.2f}", spread(per_run), paired, fmt_cost(results), money(cost),
+                      "-" if spent is None else money(spent), notes or "-"])
     return run_id
 
 
@@ -374,8 +400,8 @@ def main() -> int:
     parser.add_argument("--k", type=int, default=3, help="runs per case, odd")
     parser.add_argument("--workers", type=int, default=1, help="cases run in parallel (1 for local CPU models)")
     parser.add_argument("--note", default="", help="the one change under test")
-    parser.add_argument("--model", default=None)
-    parser.add_argument("--provider", default=None)
+    parser.add_argument("--model", default=None, help="the model to call, in place of the adapter's MODEL")
+    parser.add_argument("--provider", default=None, help="in place of the adapter's PROVIDER")
     parser.add_argument("--root", default=str(Path(__file__).resolve().parent), help="evals root directory")
     args = parser.parse_args()
 
@@ -399,13 +425,19 @@ def main() -> int:
     system = load_module(seam_dir / "system.py", f"{args.seam}_system")
     grader = load_module(seam_dir / "grader.py", f"{args.seam}_grader")
     core, rest = load_cases(eval_set, args.split)
-    model = args.model or getattr(system, "MODEL", "?")
-    provider = args.provider or getattr(system, "PROVIDER", "?")
+    # --model and --provider are handed to the adapter, which reads its constants when it calls:
+    # the model logged is the model called.
+    if args.model:
+        system.MODEL = args.model
+    if args.provider:
+        system.PROVIDER = args.provider
+    model = getattr(system, "MODEL", "?")
+    provider = getattr(system, "PROVIDER", "?")
     commit = git_commit(root)
     k = args.k
     settings = {"seam": args.seam, "eval_set": eval_set.name, "split": args.split, "k": k,
                 "model": model, "provider": provider, "commit": commit,
-                "cases_hash": file_hash(eval_set), "grader_hash": file_hash(seam_dir / "grader.py")}
+                "cases_hash": eval_set_hash(eval_set), "grader_hash": file_hash(seam_dir / "grader.py")}
 
     # Free checks before any paid call: the eval set has been read and checked, the adapter and the
     # grader import. The estimate prices every call at the last measured cost of this model.
@@ -418,8 +450,8 @@ def main() -> int:
     if args.check:
         print(f"{args.seam} | {eval_set.name} | {args.split}: {len(core)} core cases, {len(rest)} more in the "
               f"extended set; nothing called")
-        print(f"estimate at k={k}: core set ${core_estimate:.2f}, extended set ${core_estimate + rest_estimate:.2f} "
-              f"in all (${per_call:.4f} per call)")
+        print(f"estimate at k={k}: core set {money(core_estimate)}, extended set "
+              f"{money(core_estimate + rest_estimate)} in all ({money(per_call)} per call)")
         print(fmt_total(spending))
         return 0
     why_not = refusal(spending, core_estimate + rest_estimate,
@@ -437,7 +469,7 @@ def main() -> int:
     record_spending(root, spending, core_run, core_cost)
     report = [f"{args.seam} | {eval_set.name} | {args.split} | k={k} | {model} ({provider}) | {commit}",
               f"core set: {core_score:.2f} (spread {spread(core_per_run)}) over {len(core_results)} cases",
-              f"cost ${core_cost:.2f}; {fmt_total(spending)}"]
+              f"cost {money(core_cost)}; {fmt_total(spending)}"]
     if args.target is not None and declared is not None and args.target != declared:
         report.append(f"target {target:.2f} from --target; {TARGET_FILE} says {declared:.2f}")
     if core_score < target:
@@ -503,8 +535,10 @@ def main() -> int:
     run_id = save_run(root, runs_dir, settings, "extended", results, score, per_run, "; ".join(notes),
                       paired=paired, cost=rest_cost, spent=spending["spent"] + rest_cost if spending else None)
     record_spending(root, spending, run_id, rest_cost)
-    report.append(f"cost ${rest_cost:.2f} for the rest of the set; {fmt_total(spending)}")
-    if mine is None or score > mine["score"]:
+    report.append(f"cost {money(rest_cost)} for the rest of the set; {fmt_total(spending)}")
+    if score < target:
+        report.append("below the target: the run is recorded, and is not kept as a best result")
+    elif mine is None or score > mine["score"]:
         of_split[model] = {"score": score, "per_run": per_run, "code": commit, "run_id": run_id}
         report.append(f"new best result for {model} on {args.split}")
     (seam_dir / "best.json").write_text(json.dumps(best, indent=1), encoding="utf-8")

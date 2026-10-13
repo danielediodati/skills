@@ -13,7 +13,7 @@ The eval set: one JSON object per line. A run names it in the environment, `EVAL
 - `core`: `true` puts the case in the core set, the few cases (5 to 10 per split) that run first on every change. A split with no core case refuses to run. Core and extended are a different axis from dev and held-out: each split has its own core set.
 - `expected` and `rubric`: at least one of the two is set. `expected` feeds a structural, execution or reference grader; `rubric` feeds a model judge.
 - `source`: where the case came from (a trace, a ticket, the spec, grilling). Cases born from real failures are the most valuable; keep the link back to them.
-- `tags`: failure categories and slices, so a run reports per-tag scores next to the total.
+- `tags`: failure categories and slices, so a run reports per-tag scores next to the total. They describe a case and do not change it: editing them discards no best result.
 
 ## `evals/<seam>/eval.md`
 
@@ -37,12 +37,13 @@ The contract `run_evals.py` expects:
 
 ```python
 # system.py: runs one case through the system under test.
-MODEL = "llama-3.3-70b-versatile"  # logged on every row; --model overrides
-PROVIDER = "groq"                  # logged on every row; --provider overrides
+MODEL = "llama-3.3-70b-versatile"  # called, and logged on every row; --model replaces it
+PROVIDER = "groq"                  # logged on every row; --provider replaces it
 COST_PER_CASE = 0.0006             # dollars per call, the estimate before a run; 0 for a free local model
 
 def run(case_input: dict) -> dict:
-    # Call the real entry point (graph, agent, endpoint) with case_input.
+    # Call the real entry point (graph, agent, endpoint) with case_input, on MODEL as it is now:
+    # the runner sets it from --model before the first call.
     # Return {"output": ...} plus, when known, "tokens" (int), "seconds" (float)
     # and "cost" (float, dollars this call cost; COST_PER_CASE is used when it is missing).
     ...
@@ -73,11 +74,11 @@ One output you labelled yourself per line, `human` aligned with `rubric`:
 
 ## `evals/<seam>/runs/<run-id>.json`
 
-Written by the runner, never edited: the run's settings (eval set, split, `k`, model, provider, commit), the hashes of the eval set and `grader.py`, whether the run is the `core` set or the `extended` set, the per-run scores, and for every case its `k` outcomes, its majority result, its cost and any errors. A run whose core set passes writes two files: the core run, then the extended run, which reuses the core results instead of paying for them again.
+Written by the runner, never edited: the run's settings (eval set, split, `k`, model, provider, commit), the hashes of the eval set and `grader.py`, whether the run is the `core` set or the `extended` set, the per-run scores, and for every case its `k` outcomes, its `k` outputs (what the seam answered, `null` where it crashed), its majority result, its cost and any errors. Failures are read here, without paying for the calls again. A run whose core set passes writes two files: the core run, then the extended run, which reuses the core results instead of paying for them again.
 
 ## `evals/<seam>/best.json`
 
-Written by the runner, never edited: for each split, the best result of each model on the extended set, with its per-run scores, the run it came from and the code version it was measured on. It also holds the eval set and the hashes of the eval set and `grader.py` the results were measured with: when either hash changes, the runner discards every best result (the measure changed) and says so. A change to the code keeps them, reported as measured on an earlier version.
+Written by the runner, never edited: for each split, the best result of each model on the extended set among the runs that met the target, with its per-run scores, the run it came from and the code version it was measured on. It also holds the eval set and the hashes of the eval set and `grader.py` the results were measured with: when either hash changes, the runner discards every best result (the measure changed) and says so. The hash of the eval set leaves the cases' `tags` out. A change to the code keeps them, reported as measured on an earlier version.
 
 ## `evals/spending.json`
 
@@ -97,5 +98,5 @@ One row per run, newest last, appended by the runner:
 - `set`: `core` or `extended`; `calibration` for a judge calibration. A `core` row with no `extended` row after it is a change rejected on the core set.
 - `score` and `spread`: defined in SKILL.md, Noise floor.
 - `gains/losses`: paired against the run that holds this model's best result, with the one-sided sign-test p-value.
-- `cost/case`: mean tokens and seconds per case run. `cost`: the dollars this row paid for; an extended row pays only for the cases beyond the core set, whose results it reuses. `spent`: the running total against the agreed budget after this row, `-` when no budget is agreed.
+- `cost/case`: mean tokens and seconds per case run. `cost`: the dollars this row paid for, to the cent, or to two digits when under ten cents (`$0.006`); an extended row pays only for the cases beyond the core set, whose results it reuses. `spent`: the running total against the agreed budget after this row, `-` when no budget is agreed.
 - `notes`: the one change under test from `--note`, the losses listed by id (keeping the change accepts them), and `best results discarded` when the grader or the eval set changed.

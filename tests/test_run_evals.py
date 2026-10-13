@@ -19,7 +19,8 @@ RUNNER = Path(__file__).resolve().parents[1] / "a4a" / "skills" / "edd" / "scrip
 # environment is what one call costs, in dollars.
 # FAKE_OUTCOMES in the environment overrides a case's outcomes, so the seam can get worse while the
 # eval set stays the same.
-# Every call is appended to calls.txt, so a test sees which cases were paid for.
+# Every call is appended to calls.txt, so a test sees which cases were paid for, and the model the
+# adapter would have called is written to model.txt.
 SYSTEM = '''
 import json, os
 from pathlib import Path
@@ -33,6 +34,7 @@ def run(case_input):
     n = seen.count(case_input["id"])
     with CALLS.open("a") as f:
         f.write(case_input["id"] + "\\n")
+    CALLS.with_name("model.txt").write_text(MODEL)
     outcomes = json.loads(os.environ.get("FAKE_OUTCOMES", "{}")).get(case_input["id"], case_input["outcomes"])
     return {"output": outcomes[n % len(outcomes)], "cost": COST_PER_CASE}
 '''
@@ -73,6 +75,10 @@ class FakeEvals:
             env["FAKE_OUTCOMES"] = json.dumps(outcomes)
         return subprocess.run([sys.executable, str(RUNNER), *args, "--root", str(self.root)],
                               capture_output=True, text=True, env=env, cwd=self.root)
+
+    def last_run(self, which: str = "extended") -> dict:
+        path = sorted((self.seam / "runs").glob(f"*-{which}-*.json"))[-1]
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def calls(self) -> list[str]:
         path = self.seam / "calls.txt"
@@ -285,6 +291,69 @@ class Spending(unittest.TestCase):
         self.assertEqual(self.evals.calls(), [])
         self.assertIn("$0.12", done.stdout)
         self.assertIn("spent $0.00 of $1.00", done.stdout)
+
+
+class FirstRealUse(unittest.TestCase):
+    """What went wrong the first time the runner was used for real (trials/results-edd-demo.md)."""
+
+    def setUp(self):
+        self.evals = FakeEvals([case("core-1", [True], core=True), case("core-2", [True], core=True)]
+                               + [case(f"ext-{i}", [True]) for i in range(10)])
+        self.addCleanup(self.evals.close)
+
+    def test_a_cost_under_a_cent_can_be_read_in_the_estimate_the_report_and_the_log(self):
+        agreed = self.evals.run("--agree-budget", "1.00", "--note", "ticket 06", eval_set=None)
+        self.assertEqual(agreed.returncode, 0, agreed.stderr)
+        check = self.evals.run("fake", "--check", "--k", "1", cost=0.0005)
+        self.assertIn("core set $0.001, extended set $0.006", check.stdout)
+        done = self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.0005)
+        self.assertIn("cost $0.001; spent $0.001 of $1.00", done.stdout)
+        self.assertIn("cost $0.005 for the rest of the set; spent $0.006 of $1.00", done.stdout)
+        self.assertIn("| $0.005 | $0.006 |", (self.evals.root / "log.md").read_text(encoding="utf-8"))
+
+    def test_a_refusal_shows_a_cost_under_a_cent(self):
+        done = self.evals.run("fake", "--target", "0.5", "--k", "1", cost=0.0005)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("about $0.006", done.stderr)
+
+    def test_tagging_a_failed_case_keeps_the_best_results(self):
+        first = self.evals.run("fake", "--target", "0.5", "--k", "1")
+        self.assertIn("new best result", first.stdout)
+        tagged = [case("core-1", [True], core=True), case("core-2", [True], core=True)] \
+            + [case(f"ext-{i}", [True]) for i in range(10)]
+        tagged[2]["tags"] = ["long-body"]
+        self.evals.write_cases(tagged)
+        done = self.evals.run("fake", "--target", "0.5", "--k", "1")
+        self.assertNotIn("best results discarded", done.stdout)
+        self.assertIn("best result: fake-model 1.00", done.stdout)
+        self.assertIn("long-body 1.00 (1)", done.stdout)
+
+    def test_every_run_saves_what_the_seam_answered(self):
+        done = self.evals.run("fake", "--target", "0.5", "--k", "3", outcomes={"ext-0": [True, False, True]})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        outputs = {r["id"]: r["outputs"] for r in self.evals.last_run()["results"]}
+        self.assertEqual(outputs["ext-0"], [True, False, True])
+        self.assertEqual(outputs["core-1"], [True, True, True])
+        self.assertEqual({r["id"] for r in self.evals.last_run("core")["results"] if "outputs" in r},
+                         {"core-1", "core-2"})
+
+    def test_a_run_below_the_target_is_recorded_and_is_not_the_best_result(self):
+        failing = {f"ext-{i}": [False] for i in range(5)}
+        done = self.evals.run("fake", "--target", "0.8", "--k", "1", outcomes=failing)
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("extended set: 0.58", done.stdout)
+        self.assertNotIn("new best result", done.stdout)
+        self.assertEqual(self.evals.last_run()["score"], 7 / 12)
+        best = json.loads((self.evals.seam / "best.json").read_text(encoding="utf-8"))
+        self.assertEqual(best["splits"].get("dev", {}), {})
+        again = self.evals.run("fake", "--target", "0.8", "--k", "1")
+        self.assertIn("no best result for fake-model", again.stdout)
+        self.assertIn("new best result", again.stdout)
+
+    def test_the_model_chosen_on_the_command_line_is_the_one_the_adapter_calls(self):
+        done = self.evals.run("fake", "--target", "0.5", "--k", "1", "--model", "other-model")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual((self.evals.seam / "model.txt").read_text(), "other-model")
 
 
 if __name__ == "__main__":

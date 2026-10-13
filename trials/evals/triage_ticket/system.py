@@ -8,7 +8,7 @@ The model is Claude Code in print mode with its own system prompt replaced and n
 seam's prompt is all the model reads. The cost of a call is what Claude Code reports for it
 (`total_cost_usd`): on a subscription it is the price the call would have had, not a charge.
 
-EDD_MODEL names the model, so that it is the one called and not only the one logged.
+EDD_MODEL names the model, and so does the runner's `--model`, which sets MODEL before the first call.
 """
 
 import json
@@ -63,8 +63,7 @@ def run(case_input):
 
     output = triage_ticket(case_input, model)
     usage = [call.get("usage") or {} for call in calls]
-    # The runner keeps outcomes, not outputs: the answers are kept here so that failures can be
-    # read without paying for the calls again.
+    # The runner keeps each run's output; the model's raw answers are kept here.
     with _outputs_lock, OUTPUTS.open("a", encoding="utf-8") as f:
         f.write(json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "model": MODEL,
                             "subject": case_input.get("subject"), "output": output,
