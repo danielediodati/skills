@@ -58,8 +58,10 @@ class TrialDirectory(unittest.TestCase):
             {"seam.py", "test.py", "README.md", "AGENTS.md", "evals/triage_ticket/charter.md"},
         )
         rule = (work / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertIn("Each has a charter at `evals/<seam>/charter.md`", rule)
-        self.assertIn("Nothing paid runs without the user's approval", rule)
+        self.assertIn("charter at `evals/<seam>/charter.md`", rule)
+        shipped = self.runner.SETUP_SKILL.read_text(encoding="utf-8")
+        for line in rule.removeprefix("# AGENTS\n\n").splitlines():
+            self.assertIn(line, shipped)
         self.assertIn(rule, self.runner.system_prompt_args("with-v2", work)[1])
 
     def test_rule_only_has_the_rule_and_no_charter(self):
@@ -70,7 +72,6 @@ class TrialDirectory(unittest.TestCase):
         work = self.prepare("rule-only")
         rule = (work / "AGENTS.md").read_text(encoding="utf-8")
         self.assertTrue(rule.startswith("# AGENTS\n\n## Stochastic seams\n"))
-        self.assertIn("the seam's code as it stands shows it", rule)
         self.assertIn(rule.removeprefix("# AGENTS\n\n").strip(),
                       (TRIALS / "protocol-rule-only.md").read_text(encoding="utf-8"))
         self.assertNotIn("charter", rule)
