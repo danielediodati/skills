@@ -16,8 +16,6 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 Writing a charter for every seam is heavy, and no trial has run the rule in `AGENTS.md` without one. This session measures that arm before session 4 spends 144 more trials on the charter as it is. It did: the rule alone drifts in 11 of 24 trials, and the charter stays (`trials/results-rule-only.md`). A charter the agent writes alone from the code drifts in 2 of 24: the skill can draft it, and the user reviews what the code does not show (`trials/results-auto-charter.md`). Told to reason and write its own rules, the agent writes a charter that does no better and stops more (`trials/results-practice-charter.md`). The session ends with the `charter` skill rewritten as the trials say.
 
-6. **Empty the open points of what is not open.** Decision 2, an ADR, the plugin loaded, limits and parked items moved - [ticket](docs/work/3-rule-only/issues/06-housekeeping.md)
-
 ## Session 4 - `0.4.0` - How much does a charter change from one draft to the next?
 
 **Shows**: a table of 24 charters, three per seam from Sonnet and three from Haiku, each written from the code with nobody to ask, read line by line against the user's: which lines every draft finds, which none does, which depend on the draft.
@@ -59,3 +57,11 @@ The same protocol with Haiku as agent and writer of its charters, judged by Sonn
 Every number before this one comes from four synthetic seams of one file each. REPS is a real project with seams in cascade. The replay's tickets are written once the commit is found.
 
 1. **Find a commit that drifted, in REPS.** Candidates from its history, one proposed - [ticket](docs/work/7-real-project/issues/01-find-the-commit.md)
+
+## Parked
+
+No session yet.
+
+- Hosts other than Claude Code (version 2).
+- Candidate skills: `budget`, `agent-topology`, `failure-triage`, `context-budget`.
+- The author's personal `roadmap` skill, outside this repo: support for GitHub Issues, sessions against milestones.

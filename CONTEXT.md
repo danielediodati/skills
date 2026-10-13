@@ -61,9 +61,9 @@ a4a/skills/<skill>/SKILL.md
 ## Decisions
 
 1. **One plugin, `a4a`, inside the `danielediodati` marketplace,** scoped to LLM agentic systems. Replaces the earlier plan of one plugin per domain. A second plugin for generic workflow skills was considered and set aside; the marketplace leaves room for it. The author's `roadmap` skill is one of those: it stays personal, outside `a4a`.
-2. **No fork of external skill collections.** New skills live here; behaviour of external skills is adapted through wrappers or optional references, never by editing copies.
+2. **No fork of external skill collections.** New skills live here.
 3. **Standalone first.** No skill may require another collection to work.
-4. **Where there is freedom, freedom stays; where there is a constraint, the constraint stays.** How a seam splits between the two is a trade-off decided on purpose, and the solution has to match it. Moving the line is a decision, never a side effect of implementation. Where no line is drawn yet, the plugin favours neither side: it makes the user decide and shows what each side buys (freedom: adapting to unforeseen cases; constraint: reliability, cost, latency, ease of checking). This is the core rule of the plugin.
+4. **Where there is freedom, freedom stays; where there is a constraint, the constraint stays.** How a seam splits between the two is a trade-off decided on purpose, and the solution has to match it. Moving the line is a decision, never a side effect of implementation. Neither side is the default: freedom buys adapting to unforeseen cases; constraint buys reliability, cost, latency, ease of checking. This is the core rule of the plugin; why it runs both ways, and not only against code taking over, is in [ADR 1](docs/adr/0001-freedom-and-constraint-held-symmetrically.md).
 5. **Scripts use the Python standard library only,** so skills run in any environment without installs.
 6. **Few skills per plugin (target 5 to 7).** Overlapping descriptions make the agent load the wrong skill.
 7. **Each stochastic seam has a seam charter.** It lives at `evals/<seam>/charter.md`, beside that seam's eval set and best results, so every skill knows where to find it. It never lives in a ticket: a ticket closes, the seam stays. The coding agent writes it alone, from the code as it is, and asks the user only on a serious doubt: in session 3 a charter written that way drifted in 2 of 24 trials, against 15 with none and 0 with the user's (`trials/results-auto-charter.md`). It holds three parts: free, constrained, budget. The target and the eval direction live beside it in `eval.md`, until the `eval` skill owns them.
@@ -74,6 +74,16 @@ a4a/skills/<skill>/SKILL.md
 12. **A run has two lines to hold, and only one can fail it.** Below the seam's target: failure. Below that model's best result but at or above the target: a warning in the report, raised only when the gap is larger than the run-to-run spread, because the highest score is partly a lucky run. The best result informs; the target decides.
 13. **The grader and the eval set invalidate, the code ages, the model distinguishes.** A change to the grader or the eval set discards every best result of that seam: the measure changed, so earlier and later scores do not compare. A case's tags are not such a change: they describe the case. A change to the seam's code keeps them, marked as measured on an earlier version: for the same model they are the reference the warning needs, and between models they are reported as out of date until that model is run again. The model is the key the best results are kept by. A charter change discards nothing by itself: when it matters, cases or a grader change with it, and those discard.
 14. **Development spending is a constraint the plugin holds.** Nothing paid runs without the user's approval. A spending budget is agreed for the whole ticket first; every later request for approval shows the running total; free local checks run before any paid call; models are screened cheapest first. The incident behind it: one ticket spent about $8 through small approvals with the total never shown, $1.14 of it on a screening a free local check would have caught.
+
+## Known limits
+
+Weak spots that are standing limits, not work to do.
+
+- **Spotting drift in a diff takes judgement.** Telling a legitimate constraint (a closed list of valid ids) from templating (a closed list of styles) is not mechanical, and false alarms would get the check ignored.
+- **A charter can go stale.** If the line moves on purpose and the charter is not amended in the same change, the charter becomes the wrong thing.
+- **The vocabulary is heavy.** Seam, stochastic seam, charter, drift, substitution, templating, over-delegation, target, noise floor.
+- **Over-delegation has no real episode behind it.** Substitution and templating were derived from one project's documents and confirmed in passing.
+- **The process is heavy for a small project.** A charter, an eval set and the loop for every seam is a lot. The charter is cheap, and the agent writes it alone; the eval set is not.
 
 ## Conventions for skills
 
