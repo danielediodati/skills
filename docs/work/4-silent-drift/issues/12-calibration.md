@@ -1,11 +1,11 @@
 # Calibrate the two judges
 
 Status: ready-for-human
-Blocked by: 03, 04, 05, 06, 07, 08, 09
+Blocked by: 05, 06, 07, 08, 09, 10, 11
 
 ## What it produces
 
-Fifteen trials drawn from all four groups (two models, two conditions), with the condition and the agent's model hidden: eight Sonnet trials judged by Opus, seven Opus trials judged by Sonnet. Chosen where a wrong verdict costs most: borderline moves, slips, lines judged held on code the change touched.
+Fifteen trials drawn from all four groups (two models, two conditions), with the condition and the agent's model hidden: eight Sonnet trials judged by Opus, seven Opus trials judged by Sonnet. Chosen where a wrong verdict costs most: borderline moves, slips, lines judged held on code the change touched, and pairs of like changes the judge decided both ways, which session 3 found twice.
 
 Each is shown to the user in plain words: the problem, what the agent did, the line, the verdict. The user agrees or corrects, as in session 1.
 
