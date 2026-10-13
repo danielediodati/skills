@@ -1,7 +1,7 @@
 # Read the 24 drafts against the user's charters
 
 Status: ready-for-agent
-Blocked by: 03
+Blocked by: 01
 
 ## What it produces
 
@@ -9,8 +9,9 @@ A line by line reading of each draft against the user's charter for that seam, a
 
 - A table per model and seam, three drafts side by side, in `trials/drafts-read.md`.
 - Which lines every draft finds, which none does, and which depend on the draft: that last group is what one draft could not show.
-- By hand, before any trial is read. It costs nothing.
+- By hand. It costs nothing.
+- `openpoints.md`: what the reading means for the review the `charter` skill asks of the user.
 
 ## Done when
 
-- `trials/drafts-read.md` is committed, and no trial count has been read.
+- `trials/drafts-read.md` is committed, and the user has read it.

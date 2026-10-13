@@ -1,11 +1,11 @@
 # Sonnet on requests 07
 
 Status: ready-for-agent
-Blocked by: 03
+Blocked by: nothing
 
 ## What it produces
 
-24 trials under `trials/runs/sonnet/`: the four requests `07.md`, one per seam, three times in each condition (`without`, `drafted`), Sonnet 5.5 as coding agent, with the scripts and flags of the protocol's commit. Each trial judged by Opus 5.5.
+24 trials under `trials/runs/sonnet/`: the four requests `07.md`, one per seam, three times in each condition (`without`, `drafted`), Sonnet 5.5 as coding agent, under `trials/protocol-silent-drift-3.md` with the scripts and flags of its commit. Each trial judged by Opus 5.5.
 
 - Both conditions run in the same session, so neither meets a different day of the models.
 - The sessions spend the user's usage: agree the spending budget, say that 24 are about to run and wait for a go.
@@ -14,4 +14,4 @@ Blocked by: 03
 ## Done when
 
 - 24 trials have a diff, an answer, `session.json` and a verdict, committed.
-- No count is read yet: the results are read only in ticket 13.
+- No count is read yet: the results are read only in ticket 05.
