@@ -15,3 +15,7 @@ A line by line reading of each draft against the user's charter for that seam, a
 ## Done when
 
 - `trials/drafts-read.md` is committed, and the user has read it.
+
+## 2026-10-13
+
+`trials/drafts-read.md` is written and committed, and `openpoints.md` has what the reading means for the review. The ticket stays open until the user has read the file.

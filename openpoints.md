@@ -5,6 +5,7 @@ What is still undecided or undone. Decisions already taken are in `CONTEXT.md` a
 ## Waiting for a decision
 
 - **A charter written from the code makes the agent stop on changes the user wants.** 10 and 13 stops in 24 trials with the two charters an agent wrote, because nobody told it which of today's behaviours are defects (`trials/results-auto-charter.md`, `trials/results-practice-charter.md`). Only the user's charter did. What the plugin does about it is undecided: nothing, or a review by the user of what the code does not show.
+  - The reading of 24 drafts (`trials/drafts-read.md`) says what such a review would be for. No draft puts a decision on the wrong side, so the review is not a check of the whole charter. It is three questions a draft cannot answer from the code: which of today's behaviours is a defect (six lines of the user's 54, stated as wanted in every draft); what the code leaves unchecked on purpose (five lines missing or unsaid in some draft); and which limits are fixed, where a draft says "may be raised" or "not a stated rule" (six lines, differing from one draft to the next). Whether the `charter` skill asks the user those three is the decision.
 - **Whether the rule in `AGENTS.md` names the three moves agents do not see as moves:** input cleaned by code before the model reads it, a parsing rule that also catches a free field, a missing field defaulted instead of refused. `edd` names them in its diff check; the rule, always in context, does not. Changing the rule changes what sessions 5 and 6 measure.
 
 ## Work no ticket covers
