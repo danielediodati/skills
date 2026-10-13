@@ -1,0 +1,90 @@
+--- a/seam.py
++++ b/seam.py
+@@ -95,7 +95,7 @@
+     if value is None or isinstance(value, bool):
+         raise InvoiceError(f"{label} is missing")
+     try:
+-        number = Decimal(str(value).strip())
++        number = Decimal(_plain_decimal(str(value)))
+     except InvalidOperation:
+         raise InvoiceError(f"{label} is not a number: {value!r}") from None
+     if not number.is_finite():
+@@ -103,5 +103,44 @@
+     return number
+ 
+ 
++def _plain_decimal(text):
++    """Rewrite an amount as printed ('1.250,00', '1,250.00', '1 250,5') as '1250.00'.
++
++    Only unambiguous notations are rewritten; anything else is returned
++    unchanged, so that it is refused rather than guessed.
++    """
++    text = re.sub(r"[\s  ]", "", text)
++    if not re.fullmatch(r"[+-]?[\d.,]+", text):
++        return text
++    sign = text[0] if text[0] in "+-" else ""
++    body = text[len(sign):]
++    seps = [c for c in body if c in ".,"]
++    if not seps:
++        return text
++    last = seps[-1]
++    head, _, tail = body.rpartition(last)
++    other = "," if last == "." else "."
++    if len(set(seps)) == 2:
++        # Both separators: the last one is the decimal mark, the other groups thousands.
++        if last in head:
++            return text
++        groups = head.split(other)
++        if not all(len(g) == 3 for g in groups[1:]) or not groups[0]:
++            return text
++        return f"{sign}{''.join(groups)}.{tail}"
++    if seps.count(last) > 1:
++        # One separator repeated: it groups thousands ('1.250.000').
++        groups = body.split(last)
++        if all(len(g) == 3 for g in groups[1:]) and groups[0]:
++            return sign + "".join(groups)
++        return text
++    if last == ",":
++        # A lone comma is a decimal mark, unless it could be a thousands group.
++        if len(tail) == 3:
++            return text
++        return f"{sign}{head}.{tail}"
++    return text
++
++
+ def _cents(amount):
+     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+--- a/test.py
++++ b/test.py
+@@ -100,6 +100,31 @@
+         with self.assertRaisesRegex(InvoiceError, "total is not a number"):
+             extract(total="three hundred")
+ 
++    def test_continental_amounts_are_read(self):
++        lines = [{"description": "Tool", "quantity": 2, "unit_price": "2.340,50"}]
++        result = extract(lines=lines, total="4.681,00")
++        self.assertEqual(result["lines"][0]["unit_price"], Decimal("2340.50"))
++        self.assertEqual(result["total"], Decimal("4681.00"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_amount_notations(self):
++        for printed, expected in [
++            ("1.250,00", "1250.00"), ("1,250.00", "1250.00"),
++            ("1 250,00", "1250.00"), ("12,5", "12.5"),
++            ("1.250.000", "1250000"), ("1,250,000", "1250000"),
++            ("-1.250,00", "-1250.00"), ("1250.00", "1250.00"),
++        ]:
++            with self.subTest(printed=printed):
++                result = extract(lines=[{"description": "x", "quantity": 1,
++                                         "unit_price": 1}], total=printed)
++                self.assertEqual(result["total"], Decimal(expected))
++
++    def test_ambiguous_amount_is_an_error(self):
++        for printed in ["1,250", "1.2.3", "1,25,0", "1.250,0,0"]:
++            with self.subTest(printed=printed):
++                with self.assertRaisesRegex(InvoiceError, "total is not a number"):
++                    extract(total=printed)
++
+     def test_missing_quantity_is_an_error(self):
+         lines = [{"description": "Delivery", "unit_price": 15}]
+         with self.assertRaisesRegex(InvoiceError, "line 1 quantity is missing"):

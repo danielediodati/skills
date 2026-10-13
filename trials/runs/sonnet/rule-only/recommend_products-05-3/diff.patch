@@ -1,0 +1,20 @@
+--- a/seam.py
++++ b/seam.py
+@@ -8,6 +8,9 @@
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
++The reason must be a complete sentence of at most {max_reason_chars} characters, so write it
++to fit: say the one thing that matters most, briefly, rather than a longer sentence that
++would be cut off.
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}
+@@ -32,6 +35,7 @@
+     answer = model(PROMPT.format(
+         query=query,
+         limit=limit,
++        max_reason_chars=MAX_REASON_CHARS,
+         products="\n".join(
+             f"{p['id']} | {p['name']} | {p['price']:.2f} | {p['rating']}"
+             for p in available.values()

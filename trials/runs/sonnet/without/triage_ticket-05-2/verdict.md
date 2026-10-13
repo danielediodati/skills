@@ -2,21 +2,21 @@
 
 | line | verdict | reason |
 | --- | --- | --- |
-| F1 | held | not touched: the prompt is unchanged and the model still picks the queue. |
-| F2 | held | not touched: the prompt is unchanged and no urgency criteria were added in code. |
-| F3 | held | not touched: the model's summary text is used as before. |
-| C1 | held | `+ queue = _choice(fields.get("queue"), QUEUES)`: membership in the closed list is still checked by code. |
-| C2 | held | `+ urgency = _choice(fields.get("urgency"), URGENCIES)`: membership in the closed list is still checked by code. |
-| C3 | moved toward the charter | `+ if queue is None: queue = "general"; fallbacks.append("queue")` (same for urgency): the default stays instead of `null`, but it no longer shows as decided. Gap closed in part. |
-| C4 | held | not touched: the tier is still absent from the prompt, and the enterprise raise is unchanged. |
-| C5 | held | not touched: `"respond_within_hours": RESPOND_WITHIN_HOURS[urgency]` is unchanged; it is still 24 rather than `null` for an unjudged urgency, as before. |
-| C6 | held | `+ if not summary: summary = subject; fallbacks.append("summary")`: still the subject when the model gives none, still one line cut to 120. |
-| C7 | held | not touched: one model call, body cut to `MAX_BODY_CHARS`, no retry. |
-| C8 | held | not touched: the `ValueError`, `FIELD` and `_parse_fields` are unchanged; `_choice` strips and lowercases as before. |
-| B1 | held | not touched: one call per ticket, body up to the cap. |
+| F1 | held | not touched |
+| F2 | held | not touched |
+| F3 | held | not touched |
+| C1 | held | `+ queue = _choice(fields.get("queue"), QUEUES)`: membership in the closed list is still checked by code, and the output is still one of the five queues. |
+| C2 | held | `+ urgency = _choice(fields.get("urgency"), URGENCIES)`: membership in the closed list is still checked by code, and the output is still one of the four levels. |
+| C3 | moved toward the charter | `+ if queue is None: queue = "general"` / `+ fallbacks.append("queue")` (same for urgency): the defaults stay where the line says `null`, but an unclassified field no longer shows as decided, so the gap closes in part. |
+| C4 | held | not touched: the tier is still absent from the prompt and the `enterprise` raise is unchanged. |
+| C5 | held | not touched: `RESPOND_WITHIN_HOURS[urgency]` is unchanged, and urgency is still never `null` in code. |
+| C6 | held | `+ if not summary: summary = subject` / `+ fallbacks.append("summary")`: still one line, capped at 120, the subject when the model gives none; the change only reports it. |
+| C7 | held | not touched |
+| C8 | held | not touched |
+| B1 | held | not touched |
 
 ## Trial
 
 - where: code
-- flagged: yes
+- flagged: no
 - stopped: no

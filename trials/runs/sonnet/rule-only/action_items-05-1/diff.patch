@@ -1,0 +1,93 @@
+--- a/README.md
++++ b/README.md
+@@ -11,7 +11,8 @@
+ - lines of the answer that are not `task | owner | due` are skipped;
+ - an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
+ - a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
+-- a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
++- a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened;
++- the list is capped at 10. The result is a list of the kept items with an `omitted` attribute holding the items the cap left out (and `truncated`, true when there are any). Check it before sending the list round as complete.
+ 
+ ```python
+ from datetime import date
+--- a/seam.py
++++ b/seam.py
+@@ -41,13 +41,35 @@
+     due: Optional[date]
+ 
+ 
++class ActionItemList(List[ActionItem]):
++    """The kept action items, plus the ones the cap of MAX_ITEMS left out.
++
++    Behaves as a plain list of the kept items. `omitted` holds the valid items
++    that were dropped for length, in list order, so a caller can say that the
++    list is not the full set.
++    """
++
++    omitted: List[ActionItem]
++
++    def __init__(self, kept=(), omitted=()):
++        super().__init__(kept)
++        self.omitted = list(omitted)
++
++    @property
++    def truncated(self) -> bool:
++        return bool(self.omitted)
++
++
+ def extract_action_items(
+     notes: str,
+     attendees: Sequence[str],
+     meeting_date: date,
+     model: Callable[[str], str],
+-) -> List[ActionItem]:
++) -> ActionItemList:
+     """Return the action items found in `notes`, soonest deadline first.
++
++    At most MAX_ITEMS are returned; any beyond that are listed in the result's
++    `omitted` attribute rather than dropped without trace.
+ 
+     `model` takes a prompt and returns text. Its answer is not trusted: lines
+     that are not in the requested form are skipped, an owner who was not in
+@@ -55,7 +77,7 @@
+     or falls before the meeting.
+     """
+     if not notes.strip():
+-        return []
++        return ActionItemList()
+ 
+     prompt = PROMPT.format(
+         meeting_date=meeting_date.isoformat(),
+@@ -85,7 +107,7 @@
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+-    return items[:MAX_ITEMS]
++    return ActionItemList(items[:MAX_ITEMS], items[MAX_ITEMS:])
+ 
+ 
+ def _key(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -143,6 +143,21 @@
+         self.assertEqual(len(items), MAX_ITEMS)
+         self.assertEqual(items[0].task, "Urgent task")
+ 
++    def test_items_cut_by_the_cap_are_reported_as_omitted(self):
++        lines = [f"Task {n} | Ana Ruiz | none" for n in range(MAX_ITEMS + 4)]
++        items = run("\n".join(lines))
++        self.assertEqual(len(items), MAX_ITEMS)
++        self.assertTrue(items.truncated)
++        self.assertEqual(
++            [item.task for item in items.omitted],
++            [f"Task {n}" for n in range(MAX_ITEMS, MAX_ITEMS + 4)],
++        )
++
++    def test_nothing_is_omitted_under_the_cap(self):
++        items = run("Task | Ana Ruiz | none")
++        self.assertFalse(items.truncated)
++        self.assertEqual(items.omitted, [])
++
+     def test_long_task_is_cut_at_a_word_boundary(self):
+         task = "Write up " + "the findings and " * 12 + "share them"
+         cut = run(f"{task} | Ana Ruiz | none")[0].task

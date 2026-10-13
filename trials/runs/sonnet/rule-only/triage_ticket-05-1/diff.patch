@@ -1,0 +1,99 @@
+--- a/README.md
++++ b/README.md
+@@ -11,6 +11,9 @@
+ - `summary`: a single line of at most 120 characters, shown in the agents' ticket list
+ - `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
+ 
+-Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
++- `fallbacks`: the fields (`queue`, `urgency`, `summary`) for which the model gave no usable answer and a default was used instead
++- `needs_review`: `True` when `fallbacks` is not empty, i.e. the ticket arrived without a real verdict and a person should look at it straight away
++
++Anything the model answers outside these lists is replaced by `general` and `normal`, and recorded in `fallbacks`. A missing summary is replaced by the subject, likewise recorded. A ticket with neither subject nor body raises `ValueError`.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -42,19 +42,34 @@
+     ))
+     fields = _parse_fields(answer)
+ 
+-    queue = _choice(fields.get("queue"), QUEUES, "general")
+-    urgency = _choice(fields.get("urgency"), URGENCIES, "normal")
++    # A field the model did not answer with a usable value gets the default
++    # below; `fallbacks` records which ones, so the list can tell a verdict
++    # from a default.
++    fallbacks = []
++    queue = _choice(fields.get("queue"), QUEUES)
++    if queue is None:
++        queue = "general"
++        fallbacks.append("queue")
++    urgency = _choice(fields.get("urgency"), URGENCIES)
++    if urgency is None:
++        urgency = "normal"
++        fallbacks.append("urgency")
+     if ticket.get("tier") == "enterprise":
+         # Enterprise contracts promise a faster answer: one level up.
+         level = min(URGENCIES.index(urgency) + 1, len(URGENCIES) - 1)
+         urgency = URGENCIES[level]
+ 
+-    summary = " ".join(fields.get("summary", "").split()) or subject
++    summary = " ".join(fields.get("summary", "").split())
++    if not summary:
++        summary = subject
++        fallbacks.append("summary")
+     return {
+         "queue": queue,
+         "urgency": urgency,
+         "summary": summary[:MAX_SUMMARY_CHARS],
+         "respond_within_hours": RESPOND_WITHIN_HOURS[urgency],
++        "fallbacks": fallbacks,
++        "needs_review": bool(fallbacks),
+     }
+ 
+ 
+@@ -68,6 +83,6 @@
+     return fields
+ 
+ 
+-def _choice(value, allowed, default):
++def _choice(value, allowed):
+     value = (value or "").strip(" .*`\"'").lower()
+-    return value if value in allowed else default
++    return value if value in allowed else None
+--- a/test.py
++++ b/test.py
+@@ -34,7 +34,14 @@
+             "urgency": "high",
+             "summary": "Wants a duplicate charge refunded.",
+             "respond_within_hours": 8,
++            "fallbacks": [],
++            "needs_review": False,
+         })
++
++    def test_genuine_general_normal_is_not_flagged(self):
++        result = triage("queue: general\nurgency: normal\nsummary: Asks opening hours.")
++        self.assertEqual(result["fallbacks"], [])
++        self.assertFalse(result["needs_review"])
+ 
+     def test_ticket_text_reaches_the_model(self):
+         model = FakeModel("queue: billing\nurgency: low\nsummary: x")
+@@ -65,7 +72,19 @@
+             "urgency": "normal",
+             "summary": "Charged twice",
+             "respond_within_hours": 24,
++            "fallbacks": ["queue", "urgency", "summary"],
++            "needs_review": True,
+         })
++
++    def test_unknown_values_are_reported_as_fallbacks(self):
++        result = triage("queue: refunds\nurgency: asap\nsummary: x")
++        self.assertEqual(result["fallbacks"], ["queue", "urgency"])
++        self.assertTrue(result["needs_review"])
++
++    def test_missing_summary_is_reported_as_fallback(self):
++        result = triage("queue: billing\nurgency: low")
++        self.assertEqual(result["fallbacks"], ["summary"])
++        self.assertTrue(result["needs_review"])
+ 
+     def test_enterprise_is_raised_one_level(self):
+         result = triage("queue: billing\nurgency: normal\nsummary: x", tier="enterprise")

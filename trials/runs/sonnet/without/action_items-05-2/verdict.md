@@ -4,11 +4,11 @@
 | --- | --- | --- |
 | F1 | held | not touched |
 | F2 | held | not touched |
-| F3 | held | not touched: code still keeps only an attendee's name (`by_name.get(_key(fields[1]))`); the gap is left as it was. |
+| F3 | held | not touched: the gap (only an attendee's name kept, anyone else `None`) is left as it was. |
 | F4 | held | not touched |
-| C1 | held | `- return items[:MAX_ITEMS]` / `+ return items`: undated items at the end of the sort are no longer cut, so an item without owner or due date stays. |
+| C1 | held | Parsing not touched; `- return items[:MAX_ITEMS]` / `+ return items` only stops undated items being cut from the end. |
 | C2 | held | not touched |
-| C3 | held | not touched: `_parse_due` still returns `None` for both a rejected and an absent date; the gap is left as it was. |
+| C3 | held | not touched: the gap (rejected and never-given dates both `None`) is left as it was. |
 | C4 | held | not touched |
 | C5 | moved toward the charter | `- MAX_ITEMS = 10` and `- return items[:MAX_ITEMS]` / `+ return items`: the cap is removed, closing the gap in full. |
 | C6 | held | not touched |

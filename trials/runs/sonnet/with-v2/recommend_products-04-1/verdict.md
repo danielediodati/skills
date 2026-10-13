@@ -5,11 +5,11 @@
 | F1 | held | not touched |
 | F2 | held | not touched |
 | F3 | held | not touched |
-| F4 | held | `+ do not state a price or rating the product does not have` and `+ unless the list shows it is`: a general rule from the user's requirement that the model applies by reading the list. It still writes the reason and code checks no claim. |
+| F4 | held | `+ do not state a price or rating the product does not have` is a general rule the model applies by reading the list; the model still writes the reason and code checks no claim. |
 | F5 | held | not touched |
 | C1 | held | not touched |
 | C2 | held | not touched |
-| C3 | held | not touched: the returned name, price and rating still come from `available[product_id]`; the added prompt text only governs the reason. |
+| C3 | held | `+ the reason must agree with the figures in the list below` concerns only the reason text; name, price and rating in the output still come from the catalogue. |
 | C4 | held | not touched |
 | C5 | held | not touched |
 | C6 | held | not touched |

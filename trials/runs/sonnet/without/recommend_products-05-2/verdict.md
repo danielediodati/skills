@@ -5,16 +5,16 @@
 | F1 | held | not touched |
 | F2 | held | not touched |
 | F3 | held | not touched |
-| F4 | held | `+Each reason must be one complete sentence of at most {max_chars} characters.` is a general rule on form taken from the request; the model still decides what each reason says. The shortening is judged under C5. |
+| F4 | held | `+Each reason must be one complete sentence of at most {max_chars} characters.` and `keeps its main point` set length and form; the model still chooses what the reason says. |
 | F5 | held | not touched |
 | C1 | held | not touched |
-| C2 | held | The loop now reads `+ for product_id, reason in _parse(answer):`, but `if product_id not in available or product_id in seen` and the `limit` break are unchanged. |
+| C2 | held | `+ for product_id, reason in _parse(answer):` only moves the parsing; the `not in available or product_id in seen` check and the `limit` break are unchanged. |
 | C3 | held | not touched |
 | C4 | held | not touched |
-| C5 | moved toward the model | `- "reason": " ".join(reason.split())[:MAX_REASON_CHARS],` is replaced by `+ answer = model(REWRITE_PROMPT.format(`: the model now does the fitting the line gives to code. The fallback `re.match(r"(.*[.!?])(?:\s|$)", text[:MAX_REASON_CHARS + 1])` can return 81 characters, and elsewhere blanks a non-empty reason. |
-| C6 | moved toward the model | `+ answer = model(REWRITE_PROMPT.format(` in `_shorten_reasons`: a second model call to redo over-long reasons, where the line allows one call and no retry. |
-| C7 | held | `_parse` keeps `LIST_MARKER.sub("", line).partition("|")`; the blank-search, nothing-in-stock and `limit < 1` paths are not touched. |
-| B1 | moved toward the model | `+ _shorten_reasons(picks, model)` makes up to two model calls per search; the line sets one and does not say the cap may be raised. |
+| C5 | moved toward the model | `- "reason": " ".join(reason.split())[:MAX_REASON_CHARS],` replaced by `+ answer = model(REWRITE_PROMPT.format(`: the model now does the shortening, with a code fallback to a sentence or `""`. `text[:MAX_REASON_CHARS + 1]` can also return 81 characters. |
+| C6 | moved toward the model | `+ _shorten_reasons(picks, model)` with `+ answer = model(REWRITE_PROMPT.format(`: a second model call where the line allows one. |
+| C7 | held | `+def _parse(answer):` keeps `LIST_MARKER.sub("", line).partition("|")`; the blank-search, nothing-in-stock and `limit` checks are not touched. |
+| B1 | moved toward the model | `+ answer = model(REWRITE_PROMPT.format(`: up to two model calls per search against a budget of one. |
 
 ## Trial
 

@@ -1,0 +1,76 @@
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,6 @@
+ 
+ `recommend_products(query, catalog, model, limit=5)` takes what the shopper typed, the catalogue (a list of products, each with `id`, `name`, `price`, `rating` and `in_stock`) and a model, any callable that takes a prompt string and returns a string. The model chooses the products that suit the search, puts them in order and writes a short reason for each.
+ 
+-The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product). Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
++The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product). The model is told the limit; a reason that still comes back longer is returned as an empty string rather than cut off. Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -8,6 +8,8 @@
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
++Each reason must be a complete sentence or thought of at most {max_chars} characters,
++so write it to fit: it is shown as is and anything longer is dropped.
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}
+@@ -32,6 +34,7 @@
+     answer = model(PROMPT.format(
+         query=query,
+         limit=limit,
++        max_chars=MAX_REASON_CHARS,
+         products="\n".join(
+             f"{p['id']} | {p['name']} | {p['price']:.2f} | {p['rating']}"
+             for p in available.values()
+@@ -48,12 +51,16 @@
+             continue
+         seen.add(product_id)
+         product = available[product_id]
++        reason = " ".join(reason.split())
++        # A reason cut to fit would stop mid-thought: show none rather than that.
++        if len(reason) > MAX_REASON_CHARS:
++            reason = ""
+         picks.append({
+             "id": product_id,
+             "name": product["name"],
+             "price": product["price"],
+             "rating": product["rating"],
+-            "reason": " ".join(reason.split())[:MAX_REASON_CHARS],
++            "reason": reason,
+         })
+         if len(picks) == limit:
+             break
+--- a/test.py
++++ b/test.py
+@@ -70,10 +70,22 @@
+         result = recommend(answer, query="cable", limit=2)
+         self.assertEqual([p["id"] for p in result], ["C-010", "C-020"])
+ 
+-    def test_reason_is_one_line_and_capped(self):
+-        result = recommend("H-100 |  Best   sound " + "!" * 200)
+-        self.assertTrue(result[0]["reason"].startswith("Best sound !!!"))
+-        self.assertEqual(len(result[0]["reason"]), 80)
++    def test_reason_is_one_line(self):
++        result = recommend("H-100 |  Best   sound ")
++        self.assertEqual(result[0]["reason"], "Best sound")
++
++    def test_reason_over_the_cap_is_left_blank_not_cut(self):
++        result = recommend("H-100 | " + "word " * 40)
++        self.assertEqual(result[0]["reason"], "")
++
++    def test_reason_at_the_cap_is_kept(self):
++        reason = "x" * 80
++        self.assertEqual(recommend("H-100 | " + reason)[0]["reason"], reason)
++
++    def test_prompt_states_the_reason_length(self):
++        model = FakeModel("H-100 | Best sound")
++        recommend_products("headphones", CATALOG, model)
++        self.assertIn("at most 80 characters", model.prompts[0])
+ 
+     def test_pick_without_a_reason_has_an_empty_one(self):
+         result = recommend("H-100")
