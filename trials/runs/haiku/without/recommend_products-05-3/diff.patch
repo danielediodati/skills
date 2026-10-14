@@ -1,0 +1,86 @@
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,6 @@
+ 
+ `recommend_products(query, catalog, model, limit=5)` takes what the shopper typed, the catalogue (a list of products, each with `id`, `name`, `price`, `rating` and `in_stock`) and a model, any callable that takes a prompt string and returns a string. The model chooses the products that suit the search, puts them in order and writes a short reason for each.
+ 
+-The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (one line of at most 80 characters, shown under the product). Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
++The function returns a list of at most `limit` products, best first, each with `id`, `name`, `price`, `rating` and `reason` (shown under the product). A reason is one line of at most 80 characters and is never cut mid-sentence: if the model's reason is too long, only its whole sentences that fit are kept, and if none fit the reason is empty. Only products that exist in the catalogue and are in stock are returned, each one once. A blank search, or a catalogue with nothing in stock, gives an empty list.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -7,13 +7,24 @@
+ PROMPT = """A customer of an online shop searched for: {query}
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
+-Answer with one product per line, as: ID | one short reason, addressed to the customer
++Answer with one product per line, as: ID | one reason, addressed to the customer.
++The reason must be a single complete sentence of at most {max_chars} characters, ending with a full stop.
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}
+ """
+ 
+ LIST_MARKER = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
++SENTENCE_END = re.compile(r"[.!?](?=\s|$)")
++
++
++def _whole_sentences(reason):
++    """The reason if it fits, else its longest run of whole sentences that fits, else ""."""
++    reason = " ".join(reason.split())
++    if len(reason) <= MAX_REASON_CHARS:
++        return reason
++    ends = [m.end() for m in SENTENCE_END.finditer(reason) if m.end() <= MAX_REASON_CHARS]
++    return reason[:ends[-1]] if ends else ""
+ 
+ 
+ def recommend_products(query, catalog, model, limit=5):
+@@ -32,6 +43,7 @@
+     answer = model(PROMPT.format(
+         query=query,
+         limit=limit,
++        max_chars=MAX_REASON_CHARS,
+         products="\n".join(
+             f"{p['id']} | {p['name']} | {p['price']:.2f} | {p['rating']}"
+             for p in available.values()
+@@ -53,7 +65,7 @@
+             "name": product["name"],
+             "price": product["price"],
+             "rating": product["rating"],
+-            "reason": " ".join(reason.split())[:MAX_REASON_CHARS],
++            "reason": _whole_sentences(reason),
+         })
+         if len(picks) == limit:
+             break
+--- a/test.py
++++ b/test.py
+@@ -70,10 +70,24 @@
+         result = recommend(answer, query="cable", limit=2)
+         self.assertEqual([p["id"] for p in result], ["C-010", "C-020"])
+ 
+-    def test_reason_is_one_line_and_capped(self):
+-        result = recommend("H-100 |  Best   sound " + "!" * 200)
+-        self.assertTrue(result[0]["reason"].startswith("Best sound !!!"))
+-        self.assertEqual(len(result[0]["reason"]), 80)
++    def test_reason_is_one_line(self):
++        result = recommend("H-100 |  Best   sound.")
++        self.assertEqual(result[0]["reason"], "Best sound.")
++
++    def test_reason_too_long_keeps_only_whole_sentences(self):
++        long_tail = "Blocks out engine noise on long flights and the battery easily lasts a whole working day"
++        result = recommend("H-100 | Best sound. " + long_tail)
++        self.assertEqual(result[0]["reason"], "Best sound.")
++
++    def test_reason_too_long_with_no_whole_sentence_is_empty(self):
++        result = recommend("H-100 | Blocks out engine noise on long flights and the battery easily lasts a whole working day")
++        self.assertEqual(result[0]["reason"], "")
++
++    def test_reason_at_the_cap_is_kept_whole(self):
++        reason = "Blocks out engine noise on long flights and the battery lasts a whole day."
++        self.assertLessEqual(len(reason), 80)
++        result = recommend("H-100 | " + reason)
++        self.assertEqual(result[0]["reason"], reason)
+ 
+     def test_pick_without_a_reason_has_an_empty_one(self):
+         result = recommend("H-100")

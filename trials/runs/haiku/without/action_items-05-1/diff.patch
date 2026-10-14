@@ -1,0 +1,214 @@
+--- a/README.md
++++ b/README.md
+@@ -4,26 +4,29 @@
+ 
+ **In:** the notes as free text, the names of the people who were in the meeting, the date of the meeting, and a model (any callable that takes a prompt string and returns a string).
+ 
+-**Out:** a list of at most 10 `ActionItem`s, each with a short `task`, an `owner` and a `due` date, ordered by deadline with undated items last.
++**Out:** an `Extraction` with `items`, a list of every `ActionItem` found (each with a short `task`, an `owner` and a `due` date, ordered by deadline with undated items last), and `skipped`, the lines of the model's answer that could not be used. Check `skipped` before sending the list on: anything there is an agreed item that did not make it into `items`.
+ 
+ The model reads the notes and writes the items. The code decides what is kept:
+ 
+-- lines of the answer that are not `task | owner | due` are skipped;
++- lines of the answer that are not `task | owner | due` are left out of `items` and listed in `skipped`;
+ - an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
+ - a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
++
++There is no cap on the number of items.
+ 
+ ```python
+ from datetime import date
+ from seam import extract_action_items
+ 
+-items = extract_action_items(
++result = extract_action_items(
+     notes="Ana will send the revised quote to Halden by Friday the 6th. ...",
+     attendees=["Ana Ruiz", "Tom Becker"],
+     meeting_date=date(2026, 3, 3),
+     model=my_model,
+ )
+-# [ActionItem(task='Send the revised quote to Halden', owner='Ana Ruiz', due=date(2026, 3, 6))]
++# result.items   -> [ActionItem(task='Send the revised quote to Halden', owner='Ana Ruiz', due=date(2026, 3, 6))]
++# result.skipped -> []
+ ```
+ 
+ Run the tests from this directory with `python -m unittest`.
+--- a/seam.py
++++ b/seam.py
+@@ -1,11 +1,10 @@
+ """Turn free-form meeting notes into a checked list of action items."""
+ 
+ import re
+-from dataclasses import dataclass
++from dataclasses import dataclass, field
+ from datetime import date
+ from typing import Callable, List, Optional, Sequence
+ 
+-MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+ 
+ PROMPT = """\
+@@ -41,21 +40,30 @@
+     due: Optional[date]
+ 
+ 
++@dataclass(frozen=True)
++class Extraction:
++    items: List[ActionItem]
++    # Lines of the model's answer that could not be used. Empty means every
++    # line the model wrote became an item (or was a duplicate of one).
++    skipped: List[str] = field(default_factory=list)
++
++
+ def extract_action_items(
+     notes: str,
+     attendees: Sequence[str],
+     meeting_date: date,
+     model: Callable[[str], str],
+-) -> List[ActionItem]:
++) -> Extraction:
+     """Return the action items found in `notes`, soonest deadline first.
+ 
+     `model` takes a prompt and returns text. Its answer is not trusted: lines
+-    that are not in the requested form are skipped, an owner who was not in
+-    the meeting becomes None, and so does a deadline that is not a real date
+-    or falls before the meeting.
++    that are not in the requested form are reported in `skipped` rather than
++    dropped silently, an owner who was not in the meeting becomes None, and so
++    does a deadline that is not a real date or falls before the meeting.
++    Nothing is cut to a fixed length: every agreed item the model writes is kept.
+     """
+     if not notes.strip():
+-        return []
++        return Extraction(items=[], skipped=[])
+ 
+     prompt = PROMPT.format(
+         meeting_date=meeting_date.isoformat(),
+@@ -63,18 +71,27 @@
+         notes=notes.strip(),
+     )
+     answer = model(prompt)
++    if answer.strip().upper() == "NONE":
++        return Extraction(items=[], skipped=[])
+ 
+     by_name = {_key(name): name for name in attendees}
+     items: List[ActionItem] = []
++    skipped: List[str] = []
+     seen = set()
+-    for line in answer.splitlines():
+-        line = _BULLET.sub("", line).strip()
++    for raw in answer.splitlines():
++        line = _BULLET.sub("", raw).strip()
++        if not line:
++            continue
+         # Split from the right, so a task may itself contain a "|".
+-        fields = [field.strip() for field in line.rsplit("|", 2)]
++        fields = [part.strip() for part in line.rsplit("|", 2)]
+         if len(fields) != 3:
++            skipped.append(raw.strip())
+             continue
+         task = _clean_task(fields[0])
+-        if not task or _key(task) == "task":  # empty, or the header echoed back
++        if _key(task) == "task":  # the header echoed back
++            continue
++        if not task:
++            skipped.append(raw.strip())
+             continue
+         owner = by_name.get(_key(fields[1]))
+         due = _parse_due(fields[2], meeting_date)
+@@ -85,7 +102,7 @@
+ 
+     # Dated items first, soonest first; undated ones keep the model's order.
+     items.sort(key=lambda item: (item.due is None, item.due or date.max))
+-    return items[:MAX_ITEMS]
++    return Extraction(items=items, skipped=skipped)
+ 
+ 
+ def _key(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -1,7 +1,7 @@
+ import unittest
+ from datetime import date
+ 
+-from seam import MAX_ITEMS, MAX_TASK_CHARS, ActionItem, extract_action_items
++from seam import MAX_TASK_CHARS, ActionItem, Extraction, extract_action_items
+ 
+ ATTENDEES = ["Ana Ruiz", "Tom Becker", "Priya Raman"]
+ MEETING = date(2026, 3, 3)  # a Tuesday
+@@ -20,8 +20,12 @@
+         return self.answer
+ 
+ 
++def report(answer, notes=NOTES):
++    return extract_action_items(notes, ATTENDEES, MEETING, FakeModel(answer))
++
++
+ def run(answer, notes=NOTES):
+-    return extract_action_items(notes, ATTENDEES, MEETING, FakeModel(answer))
++    return report(answer, notes).items
+ 
+ 
+ class PromptTest(unittest.TestCase):
+@@ -36,7 +40,8 @@
+ 
+     def test_blank_notes_do_not_reach_the_model(self):
+         model = FakeModel("Do something | Ana Ruiz | none")
+-        self.assertEqual(extract_action_items("  \n", ATTENDEES, MEETING, model), [])
++        result = extract_action_items("  \n", ATTENDEES, MEETING, model)
++        self.assertEqual(result, Extraction(items=[], skipped=[]))
+         self.assertEqual(model.prompts, [])
+ 
+ 
+@@ -54,8 +59,8 @@
+             ],
+         )
+ 
+-    def test_none_answer_gives_no_items(self):
+-        self.assertEqual(run("NONE"), [])
++    def test_none_answer_gives_no_items_and_nothing_skipped(self):
++        self.assertEqual(report("NONE"), Extraction(items=[], skipped=[]))
+ 
+     def test_chatter_header_and_malformed_lines_are_skipped(self):
+         items = run(
+@@ -68,6 +73,20 @@
+         self.assertEqual(
+             items, [ActionItem("Order the badges", "Priya Raman", date(2026, 3, 10))]
+         )
++
++    def test_malformed_lines_are_reported_not_dropped_silently(self):
++        result = report(
++            "Book the room | Tom Becker\n"
++            " | Ana Ruiz | 2026-03-06\n"
++            "Order the badges | Priya Raman | 2026-03-10\n"
++        )
++        self.assertEqual(len(result.items), 1)
++        self.assertEqual(result.skipped, ["Book the room | Tom Becker", "| Ana Ruiz | 2026-03-06"])
++
++    def test_answer_with_no_usable_lines_is_reported(self):
++        result = report("Sorry, I could not find any action items.")
++        self.assertEqual(result.items, [])
++        self.assertEqual(result.skipped, ["Sorry, I could not find any action items."])
+ 
+     def test_bullets_numbering_and_stray_spacing_are_tolerated(self):
+         items = run(
+@@ -136,12 +155,13 @@
+             [("Tom Becker", date(2026, 3, 5)), ("Ana Ruiz", None)],
+         )
+ 
+-    def test_list_is_capped_keeping_the_soonest_deadlines(self):
+-        lines = [f"Task {n} | Ana Ruiz | none" for n in range(MAX_ITEMS)]
++    def test_every_item_is_kept_however_many_there_are(self):
++        lines = [f"Task {n} | Ana Ruiz | none" for n in range(14)]
+         lines.append("Urgent task | Tom Becker | 2026-03-04")
+-        items = run("\n".join(lines))
+-        self.assertEqual(len(items), MAX_ITEMS)
+-        self.assertEqual(items[0].task, "Urgent task")
++        result = report("\n".join(lines))
++        self.assertEqual(len(result.items), 15)
++        self.assertEqual(result.items[0].task, "Urgent task")
++        self.assertEqual(result.skipped, [])
+ 
+     def test_long_task_is_cut_at_a_word_boundary(self):
+         task = "Write up " + "the findings and " * 12 + "share them"

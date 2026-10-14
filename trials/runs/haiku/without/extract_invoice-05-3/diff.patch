@@ -1,0 +1,99 @@
+--- a/README.md
++++ b/README.md
+@@ -4,7 +4,9 @@
+ 
+ `extract_invoice(text, model)` takes the plain text of one invoice (from a PDF or an email) and a model, any callable that takes a prompt string and returns a string. The model reads the invoice and reports the supplier, invoice number, issue date, currency, the invoice lines and the total.
+ 
+-The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
++The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `subtotal`, `vat`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `subtotal` and `vat` are `None` when the invoice shows no such figure.
++
++`status` is `ok` when the invoice adds up on its own figures: the lines give the subtotal (or the lines alone, when there is no subtotal shown), and the subtotal plus VAT gives the total (or the lines alone, when there is no VAT shown). Otherwise it is `mismatch`, and a mismatched invoice goes to a clerk instead of the ledger.
+ 
+ If the model's answer can't be read, or a field is missing or malformed, the function raises `InvoiceError` with a message naming the field.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -10,7 +10,9 @@
+ PROMPT = """Extract the invoice below as a JSON object with these keys:
+ "supplier" (string), "invoice_number" (string), "issue_date" (YYYY-MM-DD),
+ "currency" (three-letter code), "lines" (a list of objects with "description",
+-"quantity" and "unit_price") and "total" (the amount due).
++"quantity" and "unit_price"), "subtotal" (the total before VAT), "vat" (the VAT
++amount) and "total" (the amount due). Use null for "subtotal" and "vat" when the
++invoice shows no such figure.
+ Answer with the JSON object only.
+ 
+ Invoice:
+@@ -60,6 +62,13 @@
+ 
+     total = _cents(_number(data.get("total"), "total"))
+     lines_total = sum((line["amount"] for line in lines), Decimal("0"))
++    subtotal = _optional_cents(data, "subtotal")
++    vat = _optional_cents(data, "vat")
++    # The lines must give the subtotal, and the subtotal plus VAT must give the amount due.
++    adds_up = (
++        (subtotal is None or subtotal == lines_total)
++        and lines_total + (vat or Decimal("0")) == total
++    )
+     return {
+         "supplier": supplier,
+         "invoice_number": invoice_number,
+@@ -67,8 +76,10 @@
+         "currency": currency,
+         "lines": lines,
+         "lines_total": lines_total,
++        "subtotal": subtotal,
++        "vat": vat,
+         "total": total,
+-        "status": "ok" if lines_total == total else "mismatch",
++        "status": "ok" if adds_up else "mismatch",
+     }
+ 
+ 
+@@ -103,5 +114,11 @@
+     return number
+ 
+ 
++def _optional_cents(data, key):
++    if data.get(key) is None:
++        return None
++    return _cents(_number(data.get(key), key))
++
++
+ def _cents(amount):
+     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+--- a/test.py
++++ b/test.py
+@@ -65,6 +65,32 @@
+         self.assertEqual(result["lines"][0]["amount"], Decimal("1.01"))
+         self.assertEqual(result["status"], "ok")
+ 
++    def test_vat_invoice_that_adds_up_is_ok(self):
++        # BP-2291 as printed: lines 309.00, VAT at 20% 61.80, amount due 370.80.
++        result = extract(subtotal=309, vat="61.80", total="370.80")
++        self.assertEqual(result["lines_total"], Decimal("309.00"))
++        self.assertEqual(result["vat"], Decimal("61.80"))
++        self.assertEqual(result["total"], Decimal("370.80"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_amount_due_not_matching_subtotal_and_vat_is_a_mismatch(self):
++        result = extract(subtotal=309, vat="61.80", total="370.90")
++        self.assertEqual(result["status"], "mismatch")
++
++    def test_vat_not_matching_the_subtotal_is_a_mismatch(self):
++        result = extract(subtotal=309, vat="60.00", total="370.80")
++        self.assertEqual(result["status"], "mismatch")
++
++    def test_subtotal_not_matching_the_lines_is_a_mismatch(self):
++        result = extract(subtotal=319, vat="63.80", total="382.80")
++        self.assertEqual(result["status"], "mismatch")
++
++    def test_null_subtotal_and_vat_are_ignored(self):
++        result = extract(subtotal=None, vat=None)
++        self.assertIsNone(result["subtotal"])
++        self.assertIsNone(result["vat"])
++        self.assertEqual(result["status"], "ok")
++
+     def test_invoice_text_reaches_the_model(self):
+         model = FakeModel(json.dumps(ANSWER))
+         extract_invoice(INVOICE_TEXT, model)

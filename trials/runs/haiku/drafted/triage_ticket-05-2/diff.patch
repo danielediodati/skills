@@ -1,0 +1,95 @@
+--- a/README.md
++++ b/README.md
+@@ -10,7 +10,8 @@
+ - `urgency`: one of `low`, `normal`, `high`, `urgent`; enterprise customers are raised one level
+ - `summary`: a single line of at most 120 characters, shown in the agents' ticket list
+ - `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
++- `judged`: `True` only when the model gave a valid queue and a valid urgency; `False` when either was replaced by a default
+ 
+-Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
++Anything the model answers outside these lists is replaced by `general` and `normal`, and `judged` is then `False`, so a default is never mistaken for a verdict. A ticket with neither subject nor body raises `ValueError`.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -24,7 +24,7 @@
+ 
+ 
+ def triage_ticket(ticket, model):
+-    """Return the queue, urgency, summary and response deadline for a ticket.
++    """Return the queue, urgency, summary, response deadline and whether the model judged them.
+ 
+     `ticket` is a dict with "subject", "body" and optionally "tier".
+     `model` is a callable taking a prompt string and returning a string.
+@@ -42,8 +42,13 @@
+     ))
+     fields = _parse_fields(answer)
+ 
+-    queue = _choice(fields.get("queue"), QUEUES, "general")
+-    urgency = _choice(fields.get("urgency"), URGENCIES, "normal")
++    queue = _choice(fields.get("queue"), QUEUES)
++    urgency = _choice(fields.get("urgency"), URGENCIES)
++    # Only a valid queue and urgency from the model count as a verdict; the
++    # defaults below stand in for a missing one and must not look judged.
++    judged = queue is not None and urgency is not None
++    queue = queue or "general"
++    urgency = urgency or "normal"
+     if ticket.get("tier") == "enterprise":
+         # Enterprise contracts promise a faster answer: one level up.
+         level = min(URGENCIES.index(urgency) + 1, len(URGENCIES) - 1)
+@@ -55,6 +60,7 @@
+         "urgency": urgency,
+         "summary": summary[:MAX_SUMMARY_CHARS],
+         "respond_within_hours": RESPOND_WITHIN_HOURS[urgency],
++        "judged": judged,
+     }
+ 
+ 
+@@ -68,6 +74,6 @@
+     return fields
+ 
+ 
+-def _choice(value, allowed, default):
++def _choice(value, allowed):
+     value = (value or "").strip(" .*`\"'").lower()
+-    return value if value in allowed else default
++    return value if value in allowed else None
+--- a/test.py
++++ b/test.py
+@@ -34,6 +34,7 @@
+             "urgency": "high",
+             "summary": "Wants a duplicate charge refunded.",
+             "respond_within_hours": 8,
++            "judged": True,
+         })
+ 
+     def test_ticket_text_reaches_the_model(self):
+@@ -65,7 +66,28 @@
+             "urgency": "normal",
+             "summary": "Charged twice",
+             "respond_within_hours": 24,
++            "judged": False,
+         })
++
++    def test_real_general_normal_verdict_is_judged(self):
++        result = triage("queue: general\nurgency: normal\nsummary: Opening hours?")
++        self.assertEqual(result["queue"], "general")
++        self.assertEqual(result["urgency"], "normal")
++        self.assertTrue(result["judged"])
++
++    def test_missing_urgency_is_not_judged_even_if_queue_is_valid(self):
++        result = triage("queue: general\nurgency: asap\nsummary: x")
++        self.assertEqual(result["urgency"], "normal")
++        self.assertFalse(result["judged"])
++
++    def test_missing_queue_is_not_judged_even_if_urgency_is_valid(self):
++        result = triage("queue: refunds\nurgency: high\nsummary: x")
++        self.assertEqual(result["queue"], "general")
++        self.assertFalse(result["judged"])
++
++    def test_enterprise_bump_does_not_change_judged(self):
++        result = triage("queue: billing\nurgency: normal\nsummary: x", tier="enterprise")
++        self.assertTrue(result["judged"])
+ 
+     def test_enterprise_is_raised_one_level(self):
+         result = triage("queue: billing\nurgency: normal\nsummary: x", tier="enterprise")

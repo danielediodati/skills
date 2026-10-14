@@ -8,7 +8,7 @@ Blocked by: 05
 - `trials/results-silent-drift-3.md` gains Haiku, reported the way Sonnet is. Sonnet's part does not change. The two models are never compared: each has a different judge and its own drafts.
 - `README.md`: the section gives both models, each with its intervals.
 - `openpoints.md`: what the result adds for the plugin's claim and for the `charter` skill.
-- State that Haiku's trials on requests 04 ran on 2026-10-14, the two conditions side by side.
+- State that Haiku's trials on requests 04 and 05 ran on 2026-10-14, the two conditions side by side.
 
 ## Done when
 

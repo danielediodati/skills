@@ -1,0 +1,13 @@
+{
+  "trial": "action_items-05-2",
+  "condition": "drafted",
+  "model": "claude-haiku-5-5",
+  "request": "seams/action_items/requests/05.md",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 15,
+  "duration_ms": 37663,
+  "total_cost_usd": 0.008077760000000002,
+  "session_id": "44764117-5fd0-4279-a58f-b47c7388af4c"
+}
