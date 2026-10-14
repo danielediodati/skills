@@ -10,13 +10,6 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.md` changes what a coding agent does when it works on a stochastic seam. This session tests it on atomic seams before any further skill is written. If ticket 5 finds drift in fewer than 12 of its 36 trials without a charter, the problem is residual and the session stops there.
 
-## Session 5 - `0.5.0` - How much does a charter Sonnet wrote cut its silent drift?
-
-**Shows**: a section of the README with Sonnet's silent drift rate, with no charter and with one it wrote from the code and nobody read, with its intervals, measured under the protocol session 4 froze.
-
-Sixteen problem-only requests, three runs each, one draft per run, judged by Opus against the user's charters. 72 new trials; no session of work runs more than 30.
-
-
 ## Session 6 - `0.6.0` - And a charter Haiku wrote, its own?
 
 **Shows**: the README section with Haiku's rate beside Sonnet's, each with its intervals, never compared with each other.
