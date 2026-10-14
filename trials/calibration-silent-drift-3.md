@@ -32,7 +32,7 @@ Every other line of those four trials keeps the judge's verdict.
 
 - **Two pairs of like changes, decided both ways by the judge:** cases 1 and 7, a calendar of dates computed by code in the prompt (14 days and 21); cases 4 and 8, the prompt telling the model to write an attendee's full name for a short one. The user decided each pair one way, so one disagreement in each pair follows from the judge's inconsistency itself.
 - **Two moves toward code the user reads as rules the model still applies by reading** (cases 3 and 6), each with a like change elsewhere the judge held.
-- All four corrections are on `drafted` trials, three of them from moved to held. The judge's other verdicts on like changes are not corrected: the protocol replaces only the verdict of the trial shown.
+- All four corrections are on `drafted` trials, three of them from moved to held. The protocol replaces only the verdict of the trial shown; the one exception the user made is below.
 - The eight were chosen where a verdict is most likely to be wrong, two pairs among them chosen because the judge had decided them both ways. Agreement on them is not agreement on a random sample of the 96.
 
 ### Decided after the calibration, on 2026-10-14
