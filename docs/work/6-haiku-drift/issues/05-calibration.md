@@ -9,6 +9,8 @@ Seven Haiku trials judged by Sonnet 5.5, drawn from both conditions with the con
 
 Each is shown to the user in plain words: the problem, what the agent did, the line, the verdict. The user agrees or corrects.
 
+- The agreement and the corrected verdicts go in `trials/calibration-silent-drift-3.md`, in a section for Sonnet as judge beside the one for Opus.
+
 ## Done when
 
 - The user has answered all seven, and the agreement is written down, out of seven.
