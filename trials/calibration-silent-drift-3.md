@@ -34,3 +34,8 @@ Every other line of those four trials keeps the judge's verdict.
 - **Two moves toward code the user reads as rules the model still applies by reading** (cases 3 and 6), each with a like change elsewhere the judge held.
 - All four corrections are on `drafted` trials, three of them from moved to held. The judge's other verdicts on like changes are not corrected: the protocol replaces only the verdict of the trial shown.
 - The eight were chosen where a verdict is most likely to be wrong, two pairs among them chosen because the judge had decided them both ways. Agreement on them is not agreement on a random sample of the 96.
+
+### Decided after the calibration, on 2026-10-14
+
+- **`drafted/action_items-04-1`, F3: held, by the user, without being shown.** Its prompt says what case 8's says: the attendee's full name from the list, "none" when it is not clear which attendee took the task. The user extended case 8's correction to it. This is a change from the protocol, which replaces only the verdicts of the trials shown, and the results say so. No other unshown trial is like a corrected one and judged the other way: the `without` trials on `action_items-04` and `06` move the line in code, and the like changes on `extract_invoice-06` and `07-1` were already held.
+- **The protocol's rule still decides,** with the corrected verdicts. The decision is quoted with the label: uncalibrated, the judge agreed with the user on 4 of 8.
