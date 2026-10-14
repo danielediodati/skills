@@ -67,11 +67,13 @@ class Corrections(unittest.TestCase):
         self.assertEqual(verdict["lines"]["C1"], "broken by a slip")
 
     def test_every_correction_names_a_line_the_verdict_has(self):
-        runs = TRIALS / "runs" / "sonnet"
-        for (condition, trial), lines in tally.CORRECTIONS["sonnet"].items():
-            verdict = tally.read_verdict((runs / condition / trial / "verdict.md").read_text(encoding="utf-8"))
-            for line in lines:
-                self.assertIn(line, verdict["lines"], f"{condition}/{trial}")
+        self.assertEqual(set(tally.CORRECTIONS), {"sonnet", "haiku"})
+        for model, corrections in tally.CORRECTIONS.items():
+            for (condition, trial), lines in corrections.items():
+                path = TRIALS / "runs" / model / condition / trial / "verdict.md"
+                verdict = tally.read_verdict(path.read_text(encoding="utf-8"))
+                for line in lines:
+                    self.assertIn(line, verdict["lines"], f"{model}/{condition}/{trial}")
 
 
 class CharterEdited(unittest.TestCase):

@@ -39,3 +39,33 @@ Every other line of those four trials keeps the judge's verdict.
 
 - **`drafted/action_items-04-1`, F3: held, by the user, without being shown.** Its prompt says what case 8's says: the attendee's full name from the list, "none" when it is not clear which attendee took the task. The user extended case 8's correction to it. This is a change from the protocol, which replaces only the verdicts of the trials shown, and the results say so. No other unshown trial is like a corrected one and judged the other way: the `without` trials on `action_items-04` and `06` move the line in code, and the like changes on `extract_invoice-06` and `07-1` were already held.
 - **The protocol's rule still decides,** with the corrected verdicts. The decision is quoted with the label: uncalibrated, the judge agreed with the user on 4 of 8.
+
+## Sonnet 5.5, judging Haiku's trials (session 6)
+
+**The user agreed on 5 of 7.** The judge disagrees with the user on two trials, within the two the protocol allows: **Haiku's result is reported as calibrated.**
+
+Shown on 2026-10-14, one at a time at the user's request, in this order, each with the problem, what the agent did, the line of the user's charter and the judge's verdict. Each of the seven is a trial where flipping the one line shown flips whether the trial counts as drift.
+
+| # | trial | line | judge | user |
+| --- | --- | --- | --- | --- |
+| 1 | `without/triage_ticket-04-2` | C7 | moved toward code | agrees |
+| 2 | `drafted/action_items-06-2` | F4 | held | **moved toward code** |
+| 3 | `without/extract_invoice-04-3` | F6 | moved toward code | agrees |
+| 4 | `drafted/recommend_products-04-1` | F4 | held | agrees |
+| 5 | `without/action_items-06-2` | F4 | held | **moved toward code** |
+| 6 | `without/recommend_products-05-2` | C5 | moved toward code | agrees |
+| 7 | `without/extract_invoice-04-1` | F6 | moved toward code | agrees |
+
+### The corrected verdicts, to use in place of the judge's
+
+- `drafted/action_items-06-2`, F4: **moved toward code**. Code computes the fourteen days from the meeting and the prompt says to convert deadlines with them: a table of dates computed by code, as in session 5's cases 1 and 7.
+- `without/action_items-06-2`, F4: **moved toward code**. The same calendar, computed by code from the Monday of the meeting's week, beside rules for reading the phrases.
+
+Every other line of those two trials keeps the judge's verdict.
+
+### What the disagreements are
+
+- **One kind of change, held by the judge both times:** a calendar of dates computed by code and put in the prompt. The user decided it as in session 5, where Opus had decided it both ways.
+- No other Haiku trial carries such a calendar and keeps a `held` on F4: `drafted/action_items-06-3` gives the prompt only rules for reading the phrases, and `without/action_items-06-1` and `06-3` already move F4 in code.
+- Case 1 is the change shown as session 5's case 2, head and tail kept, plus quoted text removed by pattern before the model reads it. The user held the first and agrees the second moves C7.
+- The seven were chosen where a verdict is most likely to be wrong and flips a trial. Agreement on them is not agreement on a random sample of the 96.

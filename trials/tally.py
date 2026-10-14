@@ -28,6 +28,10 @@ CORRECTIONS = {
         ("drafted", "action_items-04-2"): {"F3": "held"},
         ("drafted", "action_items-04-1"): {"F3": "held"},  # extended by the user, not shown
     },
+    "haiku": {
+        ("drafted", "action_items-06-2"): {"F4": "moved toward code"},
+        ("without", "action_items-06-2"): {"F4": "moved toward code"},
+    },
 }
 
 ROW = re.compile(r"^\|\s*([FCB]\d+)\s*\|\s*([^|]+?)\s*\|", re.MULTILINE)
