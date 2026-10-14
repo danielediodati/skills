@@ -1,0 +1,10 @@
+--- a/seam.py
++++ b/seam.py
+@@ -8,6 +8,7 @@
+ 
+ Pick up to {limit} products from the list that best match the search, best first.
+ Answer with one product per line, as: ID | one short reason, addressed to the customer
++Every line must have a reason after the |, saying why the product suits the search.
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}

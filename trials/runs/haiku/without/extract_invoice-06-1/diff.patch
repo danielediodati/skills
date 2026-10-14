@@ -1,0 +1,65 @@
+--- a/README.md
++++ b/README.md
+@@ -6,6 +6,6 @@
+ 
+ The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
+ 
+-If the model's answer can't be read, or a field is missing or malformed, the function raises `InvoiceError` with a message naming the field.
++If the model's answer can't be read, or a field is missing or malformed, the function raises `InvoiceError` with a message naming the field. The one exception is a line with no `quantity`: it is read as one unit, so a delivery charge or a fee loads as its single amount. If that reading is wrong, the lines won't add up to the total and the invoice comes back as `mismatch`.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -11,6 +11,8 @@
+ "supplier" (string), "invoice_number" (string), "issue_date" (YYYY-MM-DD),
+ "currency" (three-letter code), "lines" (a list of objects with "description",
+ "quantity" and "unit_price") and "total" (the amount due).
++A single charge with no quantity printed, such as a delivery or a fee, has quantity 1
++and its amount as unit_price.
+ Answer with the JSON object only.
+ 
+ Invoice:
+@@ -49,7 +51,9 @@
+     for number, raw in enumerate(raw_lines, start=1):
+         if not isinstance(raw, dict):
+             raise InvoiceError(f"line {number} is not an object")
+-        quantity = _number(raw.get("quantity"), f"line {number} quantity")
++        # A single charge such as a delivery or a fee is printed without a quantity: it is one unit.
++        quantity_value = 1 if raw.get("quantity") is None else raw.get("quantity")
++        quantity = _number(quantity_value, f"line {number} quantity")
+         unit_price = _number(raw.get("unit_price"), f"line {number} unit_price")
+         lines.append({
+             "description": str(raw.get("description") or "").strip(),
+--- a/test.py
++++ b/test.py
+@@ -100,9 +100,27 @@
+         with self.assertRaisesRegex(InvoiceError, "total is not a number"):
+             extract(total="three hundred")
+ 
+-    def test_missing_quantity_is_an_error(self):
+-        lines = [{"description": "Delivery", "unit_price": 15}]
+-        with self.assertRaisesRegex(InvoiceError, "line 1 quantity is missing"):
++    def test_single_charge_without_quantity_is_one_unit(self):
++        # NF-0718: a delivery charge is printed as one amount, with no quantity.
++        lines = [
++            {"description": "Steel brackets", "quantity": 40, "unit_price": 6.25},
++            {"description": "Delivery", "unit_price": 35.00},
++        ]
++        result = extract(lines=lines, total=285.00)
++        self.assertEqual(result["lines"][1]["quantity"], Decimal("1"))
++        self.assertEqual(result["lines"][1]["amount"], Decimal("35.00"))
++        self.assertEqual(result["lines_total"], Decimal("285.00"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_missing_quantity_on_a_multi_unit_line_is_a_mismatch(self):
++        # Read as one unit, 40 brackets at 6.25 come to 6.25, which no longer matches the total.
++        lines = [{"description": "Steel brackets", "unit_price": 6.25}]
++        result = extract(lines=lines, total=250.00)
++        self.assertEqual(result["status"], "mismatch")
++
++    def test_missing_unit_price_is_still_an_error(self):
++        lines = [{"description": "Delivery", "quantity": 1}]
++        with self.assertRaisesRegex(InvoiceError, "line 1 unit_price is missing"):
+             extract(lines=lines)
+ 
+     def test_empty_text_is_refused_before_asking_the_model(self):

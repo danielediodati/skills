@@ -1,0 +1,13 @@
+{
+  "trial": "extract_invoice-06-1",
+  "condition": "without",
+  "model": "claude-haiku-5-5",
+  "request": "seams/extract_invoice/requests/06.md",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 12,
+  "duration_ms": 26136,
+  "total_cost_usd": 0.0059016400000000005,
+  "session_id": "bbdc78b3-8864-4350-871e-79abfec53b9d"
+}

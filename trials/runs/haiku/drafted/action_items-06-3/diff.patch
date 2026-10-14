@@ -1,0 +1,28 @@
+--- a/seam.py
++++ b/seam.py
+@@ -23,6 +23,10 @@
+ - owner: the name of the person responsible, as written in the list above,
+   or "none" if nobody took it.
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
++  A deadline stated relative to the meeting is a calendar date counted from
++  the meeting date: "by Friday" is the first Friday on or after that date,
++  "next week" is the week after the meeting's week, and "end of next week"
++  is the Friday of that week.
+ 
+ If there are no action items, write only: NONE
+ 
+--- a/test.py
++++ b/test.py
+@@ -33,6 +33,12 @@
+         self.assertIn(NOTES, prompt)
+         self.assertIn("Ana Ruiz, Tom Becker, Priya Raman", prompt)
+         self.assertIn("2026-03-03", prompt)
++
++    def test_prompt_says_how_to_read_relative_deadlines(self):
++        model = FakeModel("NONE")
++        extract_action_items(NOTES, ATTENDEES, MEETING, model)
++        self.assertIn('"by Friday" is the first Friday on or after', model.prompts[0])
++        self.assertIn('"end of next week"\n  is the Friday of that week', model.prompts[0])
+ 
+     def test_blank_notes_do_not_reach_the_model(self):
+         model = FakeModel("Do something | Ana Ruiz | none")

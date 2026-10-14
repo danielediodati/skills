@@ -1,0 +1,129 @@
+--- a/README.md
++++ b/README.md
+@@ -10,7 +10,7 @@
+ 
+ - lines of the answer that are not `task | owner | due` are skipped;
+ - an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
+-- a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
++- a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`. A deadline said as a weekday or relative phrase ("by Friday", "next Monday", "end of next week") is resolved against the meeting date in code, not by the model;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
+ 
+ ```python
+--- a/seam.py
++++ b/seam.py
+@@ -2,11 +2,12 @@
+ 
+ import re
+ from dataclasses import dataclass
+-from datetime import date
++from datetime import date, timedelta
+ from typing import Callable, List, Optional, Sequence
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
++WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+ 
+ PROMPT = """\
+ Below are the notes of a meeting held on {meeting_date}.
+@@ -22,7 +23,9 @@
+ - task: a short imperative sentence, e.g. "Send the revised quote to Halden".
+ - owner: the name of the person responsible, as written in the list above,
+   or "none" if nobody took it.
+-- due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
++- due: the deadline as YYYY-MM-DD. If the notes give it another way, such as
++  "Friday", "next Monday" or "end of next week", write that phrase as it is
++  said instead. Write "none" if no deadline was given.
+ 
+ If there are no action items, write only: NONE
+ 
+@@ -32,6 +35,9 @@
+ 
+ _EMPTY = {"", "none", "n/a", "-", "?", "tbd", "unassigned"}
+ _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
++_BY = re.compile(r"^(?:by\s+)?(?:the\s+)?")
++_WEEKDAY = re.compile(r"^(next )?(" + "|".join(WEEKDAYS) + r")$")
++_END_OF_WEEK = re.compile(r"^end of (this|next) week$")
+ 
+ 
+ @dataclass(frozen=True)
+@@ -108,5 +114,27 @@
+     try:
+         due = date.fromisoformat(text)
+     except ValueError:
++        due = _resolve_phrase(_BY.sub("", _key(text)), meeting_date)
++    if due is None or due < meeting_date:
+         return None
+-    return due if due >= meeting_date else None
++    return due
++
++
++def _resolve_phrase(phrase: str, meeting_date: date) -> Optional[date]:
++    """Turn "Friday", "next Monday" or "end of next week" into a date.
++
++    A bare weekday means the next such day, counting the meeting day itself.
++    Anything else returns None rather than a guess.
++    """
++    monday = meeting_date - timedelta(days=meeting_date.weekday())
++    match = _WEEKDAY.match(phrase)
++    if match:
++        day = WEEKDAYS.index(match.group(2))
++        if match.group(1):  # "next Friday" is the Friday of the following week
++            return monday + timedelta(days=7 + day)
++        return meeting_date + timedelta(days=(day - meeting_date.weekday()) % 7)
++    match = _END_OF_WEEK.match(phrase)
++    if match:
++        weeks = 1 if match.group(1) == "next" else 0
++        return monday + timedelta(days=7 * weeks + 4)  # the Friday
++    return None
+--- a/test.py
++++ b/test.py
+@@ -111,6 +111,49 @@
+     def test_date_on_the_meeting_day_is_kept(self):
+         self.assertEqual(run("Book the room | Tom Becker | 2026-03-03")[0].due, MEETING)
+ 
++    def test_weekday_means_the_next_such_day_counting_the_meeting_day(self):
++        items = run(
++            "Send the quote | Ana Ruiz | by Friday\n"
++            "Call the caterer | Tom Becker | Tuesday\n"
++            "Pay the deposit | Priya Raman | by Monday\n"
++        )
++        self.assertEqual(
++            [item.due for item in items],
++            [date(2026, 3, 3), date(2026, 3, 6), date(2026, 3, 9)],
++        )
++
++    def test_next_weekday_is_in_the_following_week(self):
++        self.assertEqual(
++            run("Book the room | Tom Becker | next Monday")[0].due, date(2026, 3, 9)
++        )
++
++    def test_end_of_this_and_next_week_are_fridays(self):
++        items = run(
++            "A | Ana Ruiz | end of this week\n"
++            "B | Tom Becker | end of next week\n"
++        )
++        self.assertEqual(
++            [item.due for item in items], [date(2026, 3, 6), date(2026, 3, 13)]
++        )
++
++    def test_unrecognised_phrase_becomes_none(self):
++        self.assertIsNone(run("Book the room | Tom Becker | in two weeks")[0].due)
++
++    def test_meeting_deadlines_as_they_were_agreed(self):
++        items = run(
++            "Send the revised quote to Halden | Ana Ruiz | by Friday\n"
++            "Confirm the venue | Tom Becker | by the end of next week\n"
++            "Order the badges | Priya Raman | 2026-03-10\n"
++        )
++        self.assertEqual(
++            [(item.owner, item.due) for item in items],
++            [
++                ("Ana Ruiz", date(2026, 3, 6)),
++                ("Priya Raman", date(2026, 3, 10)),
++                ("Tom Becker", date(2026, 3, 13)),
++            ],
++        )
++
+ 
+ class ListTest(unittest.TestCase):
+     def test_sorted_by_deadline_with_undated_items_last_in_original_order(self):

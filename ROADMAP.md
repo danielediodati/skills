@@ -16,7 +16,6 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 The same protocol with Haiku as agent and writer of its charters, judged by Sonnet. Haiku, not Opus: the user set Opus aside as an agent for its cost; it stays only as the judge of Sonnet's trials, where it is the judge already calibrated. 96 new trials; no session of work runs more than 30.
 
-3. **Haiku on requests 06.** 24 trials - [ticket](docs/work/6-haiku-drift/issues/03-haiku-06.md)
 4. **Haiku on requests 07.** 24 trials - [ticket](docs/work/6-haiku-drift/issues/04-haiku-07.md)
 5. **Calibrate the judge of Haiku's trials.** Seven trials, condition hidden - [ticket](docs/work/6-haiku-drift/issues/05-calibration.md)
 6. **Haiku's result, and its number in the README.** As the protocol's rule gives it - [ticket](docs/work/6-haiku-drift/issues/06-results.md)

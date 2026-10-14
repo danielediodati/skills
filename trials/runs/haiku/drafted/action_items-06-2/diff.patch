@@ -1,0 +1,79 @@
+--- a/seam.py
++++ b/seam.py
+@@ -2,15 +2,19 @@
+ 
+ import re
+ from dataclasses import dataclass
+-from datetime import date
++from datetime import date, timedelta
+ from typing import Callable, List, Optional, Sequence
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+ 
++WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
++
+ PROMPT = """\
+-Below are the notes of a meeting held on {meeting_date}.
++Below are the notes of a meeting held on {meeting_weekday} {meeting_date}.
+ The people present were: {attendees}.
++The days from the meeting day for the next two weeks are:
++{calendar}
+ 
+ List every action item agreed in the meeting: something a person committed
+ to do after it. Leave out decisions, opinions and things already done.
+@@ -23,6 +27,8 @@
+ - owner: the name of the person responsible, as written in the list above,
+   or "none" if nobody took it.
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
++  A deadline given relative to the meeting, such as "by Friday" or "by the
++  end of next week", is converted to a date using the days listed above.
+ 
+ If there are no action items, write only: NONE
+ 
+@@ -57,9 +63,15 @@
+     if not notes.strip():
+         return []
+ 
++    calendar = "\n".join(
++        _day_label(meeting_date + timedelta(days=offset), offset)
++        for offset in range(14)
++    )
+     prompt = PROMPT.format(
++        meeting_weekday=WEEKDAYS[meeting_date.weekday()],
+         meeting_date=meeting_date.isoformat(),
+         attendees=", ".join(attendees),
++        calendar=calendar,
+         notes=notes.strip(),
+     )
+     answer = model(prompt)
+@@ -88,6 +100,11 @@
+     return items[:MAX_ITEMS]
+ 
+ 
++def _day_label(day: date, offset: int) -> str:
++    label = f"{WEEKDAYS[day.weekday()]} {day.isoformat()}"
++    return f"{label} (meeting day)" if offset == 0 else label
++
++
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
+ 
+--- a/test.py
++++ b/test.py
+@@ -33,6 +33,15 @@
+         self.assertIn(NOTES, prompt)
+         self.assertIn("Ana Ruiz, Tom Becker, Priya Raman", prompt)
+         self.assertIn("2026-03-03", prompt)
++
++    def test_prompt_gives_the_meeting_weekday_and_the_coming_days(self):
++        model = FakeModel("NONE")
++        extract_action_items(NOTES, ATTENDEES, MEETING, model)
++        prompt = model.prompts[0]
++        self.assertIn("held on Tue 2026-03-03", prompt)
++        self.assertIn("Tue 2026-03-03 (meeting day)", prompt)
++        self.assertIn("Fri 2026-03-06", prompt)
++        self.assertIn("Fri 2026-03-13", prompt)
+ 
+     def test_blank_notes_do_not_reach_the_model(self):
+         model = FakeModel("Do something | Ana Ruiz | none")

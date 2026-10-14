@@ -1,0 +1,181 @@
+--- a/README.md
++++ b/README.md
+@@ -10,7 +10,7 @@
+ 
+ - lines of the answer that are not `task | owner | due` are skipped;
+ - an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
+-- a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
++- the model gives the deadline in the notes' own words ("Friday", "end of next week", "10 March"), and the code works out the date from the day of the meeting: a weekday means the first such day on or after the meeting, "end of next week" means the Friday of the following Monday–Friday week. A deadline that cannot be worked out, or falls before the meeting, leaves `due` as `None`;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
+ 
+ ```python
+@@ -18,7 +18,7 @@
+ from seam import extract_action_items
+ 
+ items = extract_action_items(
+-    notes="Ana will send the revised quote to Halden by Friday the 6th. ...",
++    notes="Ana will send the revised quote to Halden by Friday. ...",
+     attendees=["Ana Ruiz", "Tom Becker"],
+     meeting_date=date(2026, 3, 3),
+     model=my_model,
+--- a/seam.py
++++ b/seam.py
+@@ -2,11 +2,34 @@
+ 
+ import re
+ from dataclasses import dataclass
+-from datetime import date
++from datetime import date, timedelta
+ from typing import Callable, List, Optional, Sequence
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
++
++_WEEKDAYS = {
++    name: number
++    for number, name in enumerate(
++        ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
++    )
++}
++_MONTHS = {
++    name: number
++    for number, name in enumerate(
++        [
++            "january", "february", "march", "april", "may", "june", "july",
++            "august", "september", "october", "november", "december",
++        ],
++        start=1,
++    )
++}
++_MONTHS.update({name[:3]: number for name, number in list(_MONTHS.items())})
++_LEAD = re.compile(r"^(?:(?:by|on|for|before|at|due)\s+)?(?:the\s+)?")
++_DAY = r"(\d{1,2})(?:st|nd|rd|th)?"
++_DAY_ONLY = re.compile(r"^(\d{1,2})(?:st|nd|rd|th)$")
++_DAY_MONTH = re.compile(r"^" + _DAY + r"\s+(?:of\s+)?([a-z]+)$")
++_MONTH_DAY = re.compile(r"^([a-z]+)\s+" + _DAY + r"$")
+ 
+ PROMPT = """\
+ Below are the notes of a meeting held on {meeting_date}.
+@@ -22,7 +45,9 @@
+ - task: a short imperative sentence, e.g. "Send the revised quote to Halden".
+ - owner: the name of the person responsible, as written in the list above,
+   or "none" if nobody took it.
+-- due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
++- due: the deadline in the words the notes use, such as "Friday",
++  "end of next week", "10 March" or "2026-03-10". Copy the words; do not
++  work out a date yourself. "none" if no deadline was given.
+ 
+ If there are no action items, write only: NONE
+ 
+@@ -52,7 +77,7 @@
+     `model` takes a prompt and returns text. Its answer is not trusted: lines
+     that are not in the requested form are skipped, an owner who was not in
+     the meeting becomes None, and so does a deadline that is not a real date
+-    or falls before the meeting.
++    or cannot be worked out from the meeting date.
+     """
+     if not notes.strip():
+         return []
+@@ -103,10 +128,50 @@
+ 
+ 
+ def _parse_due(text: str, meeting_date: date) -> Optional[date]:
+-    if _key(text) in _EMPTY:
++    phrase = _key(text).rstrip(".")
++    if phrase in _EMPTY:
+         return None
++    due = _resolve_due(phrase, meeting_date)
++    return due if due and due >= meeting_date else None
++
++
++def _resolve_due(phrase: str, meeting_date: date) -> Optional[date]:
++    """Work out the date a deadline phrase such as "Friday" refers to."""
+     try:
+-        due = date.fromisoformat(text)
++        return date.fromisoformat(phrase)
++    except ValueError:
++        pass
++    phrase = _LEAD.sub("", phrase)
++    if phrase == "end of next week":
++        return _next_monday(meeting_date) + timedelta(days=4)
++    if phrase in _WEEKDAYS:
++        # The first such weekday on or after the meeting day.
++        return meeting_date + timedelta(days=(_WEEKDAYS[phrase] - meeting_date.weekday()) % 7)
++    match = _DAY_ONLY.match(phrase)
++    if match:
++        return _on(meeting_date.year, meeting_date.month, int(match.group(1)))
++    match = _DAY_MONTH.match(phrase)
++    if match:
++        return _month_day(meeting_date, match.group(2), match.group(1))
++    match = _MONTH_DAY.match(phrase)
++    if match:
++        return _month_day(meeting_date, match.group(1), match.group(2))
++    return None
++
++
++def _next_monday(meeting_date: date) -> date:
++    return meeting_date - timedelta(days=meeting_date.weekday()) + timedelta(days=7)
++
++
++def _month_day(meeting_date: date, month_name: str, day: str) -> Optional[date]:
++    month = _MONTHS.get(month_name)
++    if month is None:
++        return None
++    return _on(meeting_date.year, month, int(day))
++
++
++def _on(year: int, month: int, day: int) -> Optional[date]:
++    try:
++        return date(year, month, day)
+     except ValueError:
+         return None
+-    return due if due >= meeting_date else None
+--- a/test.py
++++ b/test.py
+@@ -111,6 +111,46 @@
+     def test_date_on_the_meeting_day_is_kept(self):
+         self.assertEqual(run("Book the room | Tom Becker | 2026-03-03")[0].due, MEETING)
+ 
++    def test_weekday_means_the_next_one_on_or_after_the_meeting(self):
++        items = run(
++            "Send the quote | Ana Ruiz | Friday\n"
++            "Confirm the agenda | Priya Raman | on Tuesday\n"
++            "Call the venue | Tom Becker | Monday\n"
++        )
++        self.assertEqual(
++            [item.due for item in items],
++            [date(2026, 3, 3), date(2026, 3, 6), date(2026, 3, 9)],
++        )
++
++    def test_end_of_next_week_is_the_friday_of_the_following_week(self):
++        items = run("Confirm the venue | Tom Becker | by the end of next week")
++        self.assertEqual(items[0].due, date(2026, 3, 13))
++
++    def test_day_and_month_in_any_common_form(self):
++        items = run(
++            "A | Ana Ruiz | by 10 March\n"
++            "B | Ana Ruiz | March 10th\n"
++            "C | Ana Ruiz | the 6th\n"
++            "D | Ana Ruiz | 10 Mar\n"
++        )
++        self.assertEqual(
++            {item.task: item.due for item in items},
++            {
++                "A": date(2026, 3, 10),
++                "B": date(2026, 3, 10),
++                "C": date(2026, 3, 6),
++                "D": date(2026, 3, 10),
++            },
++        )
++
++    def test_phrase_that_cannot_be_resolved_becomes_none(self):
++        items = run(
++            "A | Ana Ruiz | next month\n"
++            "B | Ana Ruiz | 31 February\n"
++            "C | Ana Ruiz | 2 March\n"
++        )
++        self.assertEqual([item.due for item in items], [None, None, None])
++
+ 
+ class ListTest(unittest.TestCase):
+     def test_sorted_by_deadline_with_undated_items_last_in_original_order(self):

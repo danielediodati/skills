@@ -1,0 +1,107 @@
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@
+ 
+ - `queue`: one of `billing`, `technical`, `account`, `shipping`, `general`
+ - `urgency`: one of `low`, `normal`, `high`, `urgent`; enterprise customers are raised one level
+-- `summary`: a single line of at most 120 characters, shown in the agents' ticket list
++- `summary`: a single line of at most 120 characters, shown in the agents' ticket list. Card numbers, security codes (CVC and similar) and passwords or PINs are replaced with `[card number]`, `[code]` and `[secret]` before it is returned, whatever the model wrote. The ticket itself is not changed.
+ - `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
+ 
+ Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
+--- a/seam.py
++++ b/seam.py
+@@ -13,7 +13,7 @@
+ Answer with exactly three lines:
+ queue: one of {queues}
+ urgency: one of {urgencies}
+-summary: one sentence saying what the customer needs
++summary: one sentence saying what the customer needs; never repeat a card number, security code, password, PIN or other secret the customer typed, say "a card" or "the password" instead
+ 
+ Subject: {subject}
+ 
+@@ -21,6 +21,23 @@
+ """
+ 
+ FIELD = re.compile(r"^\W*(queue|urgency|summary)\W*:\s*(.+)$", re.IGNORECASE)
++
++# The ticket list is seen by many people, so summaries must not carry secrets.
++# The model is asked not to repeat them, but these patterns are the guarantee.
++SECRET_PATTERNS = (
++    # Card numbers: 13 to 19 digits, optionally grouped by spaces or dashes.
++    (re.compile(r"\b(?:\d[ -]?){12,18}\d\b"), "[card number]"),
++    # Security codes written after their label: "CVC 318", "security code: 4821".
++    (re.compile(r"\b(cvc2?|cvv2?|csc|cid|security code|card code)(\W{0,3})\d{3,4}\b",
++                re.IGNORECASE), r"\1\2[code]"),
++    # Passwords, passcodes and PINs, with the value after them. Common words
++    # that follow "password" without being a secret ("password reset",
++    # "password is expired") are kept.
++    (re.compile(r"\b(password|passcode|passphrase|pin)\b(\s+(?:is|was|of|:)\s*|\s+|:\s*|=\s*)"
++                r"(?!(?:is|was|has|have|not|still|reset|change|changed|expired|manager|link|"
++                r"email|page|form|field|prompt|box|request|screen)\b)[^\s,;)]+",
++                re.IGNORECASE), r"\1\2[secret]"),
++)
+ 
+ 
+ def triage_ticket(ticket, model):
+@@ -50,6 +67,7 @@
+         urgency = URGENCIES[level]
+ 
+     summary = " ".join(fields.get("summary", "").split()) or subject
++    summary = _redact(summary)
+     return {
+         "queue": queue,
+         "urgency": urgency,
+@@ -71,3 +89,9 @@
+ def _choice(value, allowed, default):
+     value = (value or "").strip(" .*`\"'").lower()
+     return value if value in allowed else default
++
++
++def _redact(text):
++    for pattern, replacement in SECRET_PATTERNS:
++        text = pattern.sub(replacement, text)
++    return text
+--- a/test.py
++++ b/test.py
+@@ -87,6 +87,40 @@
+         triage_ticket({"subject": "Hi", "body": "x" * 2000 + "TAIL"}, model)
+         self.assertNotIn("TAIL", model.prompts[0])
+ 
++    def test_card_number_and_security_code_are_not_in_summary(self):
++        result = triage(
++            "queue: billing\nurgency: high\nsummary: Wants the duplicate charge on "
++            "card 4539 1488 0343 6467 (CVC 318) reversed."
++        )
++        self.assertEqual(
++            result["summary"],
++            "Wants the duplicate charge on card [card number] (CVC [code]) reversed.",
++        )
++
++    def test_password_is_not_in_summary(self):
++        result = triage(
++            "queue: account\nurgency: high\nsummary: Can't log in with password "
++            "Tulip-Harbour-92 and wants access restored"
++        )
++        self.assertEqual(
++            result["summary"],
++            "Can't log in with password [secret] and wants access restored",
++        )
++
++    def test_password_reset_is_not_redacted(self):
++        result = triage("queue: account\nurgency: low\nsummary: Password reset email never arrived.")
++        self.assertEqual(result["summary"], "Password reset email never arrived.")
++
++    def test_secret_in_subject_is_redacted_in_fallback_summary(self):
++        ticket = {"subject": "Card 4539148803436467 charged twice", "body": "Help"}
++        result = triage_ticket(ticket, FakeModel("I am not sure."))
++        self.assertEqual(result["summary"], "Card [card number] charged twice")
++
++    def test_prompt_asks_the_model_to_leave_out_secrets(self):
++        model = FakeModel("queue: billing\nurgency: low\nsummary: x")
++        triage_ticket(TICKET, model)
++        self.assertIn("never repeat a card number", model.prompts[0])
++
+     def test_empty_ticket_is_refused_before_asking_the_model(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")
+         with self.assertRaises(ValueError):

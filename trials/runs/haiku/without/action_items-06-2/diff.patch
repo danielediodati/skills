@@ -1,0 +1,82 @@
+--- a/seam.py
++++ b/seam.py
+@@ -2,14 +2,16 @@
+ 
+ import re
+ from dataclasses import dataclass
+-from datetime import date
++from datetime import date, timedelta
+ from typing import Callable, List, Optional, Sequence
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+ 
++_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
++
+ PROMPT = """\
+-Below are the notes of a meeting held on {meeting_date}.
++Below are the notes of a meeting held on {meeting_weekday} {meeting_date}.
+ The people present were: {attendees}.
+ 
+ List every action item agreed in the meeting: something a person committed
+@@ -23,6 +25,16 @@
+ - owner: the name of the person responsible, as written in the list above,
+   or "none" if nobody took it.
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
++
++Work out each deadline from the notes, using this calendar:
++
++{calendar}
++
++- "by Friday" (or any weekday) means the next such day on or after the meeting.
++- "next week" means the Monday-to-Sunday week after the week of the meeting;
++  "by the end of next week" means the Friday of that week.
++- "by the 10th" means the 10th of the month the meeting is in, or the next
++  month if that date has already passed.
+ 
+ If there are no action items, write only: NONE
+ 
+@@ -58,8 +70,10 @@
+         return []
+ 
+     prompt = PROMPT.format(
++        meeting_weekday=_DAYS[meeting_date.weekday()],
+         meeting_date=meeting_date.isoformat(),
+         attendees=", ".join(attendees),
++        calendar=_calendar(meeting_date),
+         notes=notes.strip(),
+     )
+     answer = model(prompt)
+@@ -88,6 +102,13 @@
+     return items[:MAX_ITEMS]
+ 
+ 
++def _calendar(meeting_date: date) -> str:
++    """The Monday of the meeting's week to the Sunday after next, one day per line."""
++    start = meeting_date - timedelta(days=meeting_date.weekday())
++    days = [start + timedelta(days=offset) for offset in range(14)]
++    return "\n".join(f"{_DAYS[day.weekday()]} {day.isoformat()}" for day in days)
++
++
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
+ 
+--- a/test.py
++++ b/test.py
+@@ -33,6 +33,16 @@
+         self.assertIn(NOTES, prompt)
+         self.assertIn("Ana Ruiz, Tom Becker, Priya Raman", prompt)
+         self.assertIn("2026-03-03", prompt)
++
++    def test_prompt_gives_the_weekday_and_a_calendar_for_relative_deadlines(self):
++        model = FakeModel("NONE")
++        extract_action_items(NOTES, ATTENDEES, MEETING, model)
++        prompt = model.prompts[0]
++        self.assertIn("Tuesday 2026-03-03", prompt)
++        self.assertIn("Thursday 2026-03-05", prompt)
++        self.assertIn("Friday 2026-03-06", prompt)
++        self.assertIn("Friday 2026-03-13", prompt)
++        self.assertIn("end of next week", prompt)
+ 
+     def test_blank_notes_do_not_reach_the_model(self):
+         model = FakeModel("Do something | Ana Ruiz | none")
