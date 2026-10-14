@@ -1,0 +1,217 @@
+--- a/README.md
++++ b/README.md
+@@ -2,7 +2,9 @@
+ 
+ Used by an accounts-payable team to load supplier invoices into the ledger without retyping them.
+ 
+-`extract_invoice(text, model)` takes the plain text of one invoice (from a PDF or an email) and a model, any callable that takes a prompt string and returns a string. The model reads the invoice and reports the supplier, invoice number, issue date, currency, the invoice lines and the total.
++`extract_invoice(text, model, date_orders=None)` takes the plain text of one invoice (from a PDF or an email) and a model, any callable that takes a prompt string and returns a string. The model reads the invoice and reports the supplier, invoice number, issue date as printed, currency, the invoice lines and the total.
++
++`date_orders` maps a supplier name, exactly as it appears on the invoice, to `"DMY"` (day first, e.g. a UK supplier) or `"MDY"` (month first, e.g. a US supplier). The code reads the printed date itself. A date such as `05/08/2026` is only accepted when the order is on file or the numbers settle it (a part over 12 cannot be a month). Otherwise the function raises `InvoiceError` ("issue_date is ambiguous") so a clerk sets the date by hand.
+ 
+ The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -7,10 +7,24 @@
+ 
+ CENT = Decimal("0.01")
+ 
++MONTHS = {}
++for _number, _name in enumerate([
++    "january", "february", "march", "april", "may", "june", "july",
++    "august", "september", "october", "november", "december",
++], start=1):
++    MONTHS[_name] = _number
++    MONTHS[_name[:3]] = _number
++
++ISO_DATE = re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})")
++DAY_MONTH_NAME = re.compile(r"(\d{1,2})\s+([A-Za-z]+)\.?,?\s+(\d{4})")
++MONTH_NAME_DAY = re.compile(r"([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})")
++NUMERIC_DATE = re.compile(r"(\d{1,2})([/.-])(\d{1,2})\2(\d{4})")
++
+ PROMPT = """Extract the invoice below as a JSON object with these keys:
+-"supplier" (string), "invoice_number" (string), "issue_date" (YYYY-MM-DD),
+-"currency" (three-letter code), "lines" (a list of objects with "description",
+-"quantity" and "unit_price") and "total" (the amount due).
++"supplier" (string), "invoice_number" (string), "issue_date" (the date exactly
++as printed on the invoice, such as "05/08/2026"; copy it, do not reformat or
++reorder its parts), "currency" (three-letter code), "lines" (a list of objects
++with "description", "quantity" and "unit_price") and "total" (the amount due).
+ Answer with the JSON object only.
+ 
+ Invoice:
+@@ -22,10 +36,14 @@
+     """The invoice could not be read into a usable record."""
+ 
+ 
+-def extract_invoice(text, model):
++def extract_invoice(text, model, date_orders=None):
+     """Return the invoice in `text` as a dict, with the total checked against the lines.
+ 
+     `model` is a callable taking a prompt string and returning a string.
++    `date_orders` maps a supplier name, as it appears on the invoice, to
++    "DMY" (day first, e.g. UK) or "MDY" (month first, e.g. US). It is only
++    used for dates such as 05/08/2026 whose printed numbers could be read
++    either way; an ambiguous date with no order on file is an error.
+     """
+     if not text.strip():
+         raise InvoiceError("empty invoice text")
+@@ -33,11 +51,7 @@
+ 
+     supplier = _text(data, "supplier")
+     invoice_number = _text(data, "invoice_number")
+-    raw_date = _text(data, "issue_date")
+-    try:
+-        issue_date = date.fromisoformat(raw_date)
+-    except ValueError:
+-        raise InvoiceError(f"issue_date is not a date: {raw_date!r}") from None
++    issue_date = _issue_date(_text(data, "issue_date"), (date_orders or {}).get(supplier))
+     currency = _text(data, "currency").upper()
+     if not re.fullmatch(r"[A-Z]{3}", currency):
+         raise InvoiceError(f"currency is not a three-letter code: {currency!r}")
+@@ -70,6 +84,43 @@
+         "total": total,
+         "status": "ok" if lines_total == total else "mismatch",
+     }
++
++
++def _issue_date(raw, date_order):
++    # Dates with a written-out month, or in ISO form, have only one reading.
++    match = ISO_DATE.fullmatch(raw)
++    if match:
++        return _make_date(int(match[1]), int(match[2]), int(match[3]), raw)
++    match = DAY_MONTH_NAME.fullmatch(raw)
++    if match and match[2].lower() in MONTHS:
++        return _make_date(int(match[3]), MONTHS[match[2].lower()], int(match[1]), raw)
++    match = MONTH_NAME_DAY.fullmatch(raw)
++    if match and match[1].lower() in MONTHS:
++        return _make_date(int(match[3]), MONTHS[match[1].lower()], int(match[2]), raw)
++
++    # Numeric dates: 05/08/2026 is 5 August in the UK and 8 May in the US.
++    match = NUMERIC_DATE.fullmatch(raw)
++    if not match:
++        raise InvoiceError(f"issue_date is not a date: {raw!r}")
++    first, second, year = int(match[1]), int(match[3]), int(match[4])
++    if first == second:
++        return _make_date(year, first, first, raw)
++    if first > 12 >= second:
++        return _make_date(year, second, first, raw)
++    if second > 12 >= first:
++        return _make_date(year, first, second, raw)
++    if date_order == "DMY":
++        return _make_date(year, second, first, raw)
++    if date_order == "MDY":
++        return _make_date(year, first, second, raw)
++    raise InvoiceError(f"issue_date is ambiguous, no date order on file: {raw!r}")
++
++
++def _make_date(year, month, day, raw):
++    try:
++        return date(year, month, day)
++    except ValueError:
++        raise InvoiceError(f"issue_date is not a date: {raw!r}") from None
+ 
+ 
+ def _load_json(answer):
+--- a/test.py
++++ b/test.py
+@@ -10,13 +10,18 @@
+ ANSWER = {
+     "supplier": "Brightwell Paper Ltd",
+     "invoice_number": "BP-2291",
+-    "issue_date": "2026-10-02",
++    "issue_date": "02/10/2026",
+     "currency": "eur",
+     "lines": [
+         {"description": "A4 paper, box", "quantity": 12, "unit_price": 24.5},
+         {"description": "Delivery", "quantity": 1, "unit_price": "15.00"},
+     ],
+     "total": 309.0,
++}
++
++DATE_ORDERS = {
++    "Brightwell Paper Ltd": "DMY",
++    "Harlow & Vance Inc": "MDY",
+ }
+ 
+ 
+@@ -30,8 +35,14 @@
+         return self.answer
+ 
+ 
+-def extract(**changes):
+-    return extract_invoice(INVOICE_TEXT, FakeModel(json.dumps({**ANSWER, **changes})))
++def extract(date_orders=DATE_ORDERS, **changes):
++    return extract_invoice(
++        INVOICE_TEXT, FakeModel(json.dumps({**ANSWER, **changes})), date_orders
++    )
++
++
++def issue_date_of(printed, supplier="Brightwell Paper Ltd"):
++    return extract(issue_date=printed, supplier=supplier)["issue_date"]
+ 
+ 
+ class ExtractInvoiceTest(unittest.TestCase):
+@@ -67,13 +78,13 @@
+ 
+     def test_invoice_text_reaches_the_model(self):
+         model = FakeModel(json.dumps(ANSWER))
+-        extract_invoice(INVOICE_TEXT, model)
++        extract_invoice(INVOICE_TEXT, model, DATE_ORDERS)
+         self.assertEqual(len(model.prompts), 1)
+         self.assertIn(INVOICE_TEXT, model.prompts[0])
+ 
+     def test_json_inside_a_code_fence_is_read(self):
+         answer = "Here is the invoice:\n```json\n" + json.dumps(ANSWER) + "\n```"
+-        result = extract_invoice(INVOICE_TEXT, FakeModel(answer))
++        result = extract_invoice(INVOICE_TEXT, FakeModel(answer), DATE_ORDERS)
+         self.assertEqual(result["status"], "ok")
+ 
+     def test_answer_without_json_is_an_error(self):
+@@ -87,6 +98,45 @@
+     def test_unreadable_date_is_an_error(self):
+         with self.assertRaisesRegex(InvoiceError, "issue_date is not a date"):
+             extract(issue_date="2nd October")
++
++    def test_uk_numeric_date_is_read_day_first(self):
++        # BP-2304: "05/08/2026" from Brightwell is 5 August, not 8 May.
++        self.assertEqual(issue_date_of("05/08/2026"), date(2026, 8, 5))
++
++    def test_us_numeric_date_is_read_month_first(self):
++        # "03/04/2026" from a US supplier is 4 March, not 3 April.
++        self.assertEqual(issue_date_of("03/04/2026", "Harlow & Vance Inc"), date(2026, 3, 4))
++
++    def test_ambiguous_date_without_a_date_order_is_an_error(self):
++        with self.assertRaisesRegex(InvoiceError, "issue_date is ambiguous"):
++            issue_date_of("05/08/2026", "Unknown Supplier Co")
++
++    def test_date_order_is_matched_on_the_exact_supplier_name(self):
++        with self.assertRaisesRegex(InvoiceError, "issue_date is ambiguous"):
++            issue_date_of("05/08/2026", "Brightwell Paper Limited")
++
++    def test_date_with_a_day_over_12_fixes_the_order(self):
++        self.assertEqual(issue_date_of("13/08/2026", "Unknown Supplier Co"), date(2026, 8, 13))
++        self.assertEqual(issue_date_of("08/13/2026", "Unknown Supplier Co"), date(2026, 8, 13))
++
++    def test_same_day_and_month_needs_no_order(self):
++        self.assertEqual(issue_date_of("05/05/2026", "Unknown Supplier Co"), date(2026, 5, 5))
++
++    def test_dates_with_a_written_month_need_no_order(self):
++        self.assertEqual(issue_date_of("5 August 2026", "Unknown Supplier Co"), date(2026, 8, 5))
++        self.assertEqual(issue_date_of("Aug 5, 2026", "Unknown Supplier Co"), date(2026, 8, 5))
++
++    def test_iso_date_is_read(self):
++        self.assertEqual(issue_date_of("2026-08-05", "Unknown Supplier Co"), date(2026, 8, 5))
++
++    def test_impossible_date_is_an_error(self):
++        with self.assertRaisesRegex(InvoiceError, "issue_date is not a date"):
++            issue_date_of("31/02/2026")
++
++    def test_prompt_asks_for_the_date_as_printed(self):
++        model = FakeModel(json.dumps(ANSWER))
++        extract_invoice(INVOICE_TEXT, model, DATE_ORDERS)
++        self.assertIn("exactly", model.prompts[0])
+ 
+     def test_bad_currency_is_an_error(self):
+         with self.assertRaisesRegex(InvoiceError, "currency"):

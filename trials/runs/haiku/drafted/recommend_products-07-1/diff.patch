@@ -1,0 +1,14 @@
+--- a/seam.py
++++ b/seam.py
+@@ -6,8 +6,9 @@
+ 
+ PROMPT = """A customer of an online shop searched for: {query}
+ 
+-Pick up to {limit} products from the list that best match the search, best first.
+-Answer with one product per line, as: ID | one short reason, addressed to the customer
++Pick up to {limit} products from the list that genuinely suit the search, best first.
++Only pick a product the customer is looking for, or a close alternative to it (a synonym, or the same need). If no product suits the search, answer with nothing: no suggestions is better than unrelated ones.
++Answer with one product per line, as: ID | one short reason, addressed to the customer, saying how the product suits this search
+ 
+ Products (ID | name | price | rating out of 5):
+ {products}
