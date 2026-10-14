@@ -16,7 +16,6 @@ The plugin rests on one untested claim: a seam charter plus the rule in `AGENTS.
 
 Sixteen problem-only requests, three runs each, one draft per run, judged by Opus against the user's charters. 72 new trials; no session of work runs more than 30.
 
-5. **Sonnet's result, and its number in the README.** As the protocol's rule gives it - [ticket](docs/work/5-sonnet-drift/issues/05-results.md)
 
 ## Session 6 - `0.6.0` - And a charter Haiku wrote, its own?
 
