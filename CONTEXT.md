@@ -45,6 +45,7 @@ a4a/skills/<skill>/SKILL.md
 | **Substitution** | Programmatic drift where code takes the decision in place of the model: a value fixed in a constant, a canned reply. |
 | **Templating** | Programmatic drift where the model still decides, but only by picking from a closed list prepared in advance. |
 | **Over-delegation** | The opposite drift: a constraint dissolving into model judgement (the model does arithmetic the code owned, or may invent a value that had to come from a list). |
+| **Drift episode** | Drift as it happens in a real project's history: the run of commits from the last state where a decision sat where the design put it to the first state where it sits on the other side, with the requests that led there. Rarely one commit: each step looks harmless alone. It counts as drift only if nothing written at the time (ADR, ticket, glossary, commit message) declares the move; a declared move is a decision, kept for contrast. |
 | **Seam** | The boundary where a module's interface lives and where it is tested. |
 | **Deterministic seam** | Same input, same output. Tested with unit tests (TDD). |
 | **Stochastic seam** | Output produced by a model: prompt, graph node, routing, tool choice, retrieval, sub-agent, fine-tune. It varies from run to run, so it is tested with evals (EDD). A model call stays a stochastic seam even at temperature 0. The practical test: it has its own eval suite. Usually an agent; sometimes a router, a single prompt or a model judge. The inner steps of an agent are not seams until they are evaluated on their own. |

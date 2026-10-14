@@ -6,11 +6,13 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 ## Session 7 - `0.7.0` - Would the charter have stopped a drift that really happened?
 
-**Shows**: a commit of REPS in which a decision moved between the model and code unnoticed, replayed with a charter and the rule, and whether the agent stops where the history did not.
+**Shows**: REPS's drift episodes, each replayed by the model that made it, without a charter and with one, and whether the agent holds the line where the history did not.
 
-Every number before this one comes from four synthetic seams of one file each. REPS is a real project with seams in cascade. The replay's tickets are written once the commit is found.
+Every number before this one comes from four synthetic seams of one file each. REPS is a real project with seams in cascade, built by Opus.
 
-1. **Find a commit that drifted, in REPS.** Candidates from its history, one proposed - [ticket](docs/work/7-real-project/issues/01-find-the-commit.md)
+1. **Find the drift episodes in REPS.** Both directions, declared moves apart - [ticket](docs/work/7-real-project/issues/01-find-the-episodes.md)
+2. **Freeze the replay protocol.** Before any paid call - [ticket](docs/work/7-real-project/issues/02-replay-protocol.md)
+3. **Replay the episodes.** With Opus, 3 runs per condition - [ticket](docs/work/7-real-project/issues/03-replay.md)
 
 ## Parked
 
