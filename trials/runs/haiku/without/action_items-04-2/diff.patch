@@ -1,0 +1,170 @@
+--- a/README.md
++++ b/README.md
+@@ -9,7 +9,7 @@
+ The model reads the notes and writes the items. The code decides what is kept:
+ 
+ - lines of the answer that are not `task | owner | due` are skipped;
+-- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
++- an owner is kept only if it names exactly one of the attendees: a full name, a first or last name, a name with an initial ("Ana R."), or a nickname given in `aliases`. It is returned spelled as the caller gave it. A first name shared by two attendees, or a name that is not in the meeting, leaves the item in with `owner` set to `None`;
+ - a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
+ 
+@@ -22,6 +22,7 @@
+     attendees=["Ana Ruiz", "Tom Becker"],
+     meeting_date=date(2026, 3, 3),
+     model=my_model,
++    aliases={"Tom Becker": ["Tommy"]},  # optional: nicknames people go by
+ )
+ # [ActionItem(task='Send the revised quote to Halden', owner='Ana Ruiz', due=date(2026, 3, 6))]
+ ```
+--- a/seam.py
++++ b/seam.py
+@@ -3,7 +3,7 @@
+ import re
+ from dataclasses import dataclass
+ from datetime import date
+-from typing import Callable, List, Optional, Sequence
++from typing import Callable, List, Mapping, Optional, Sequence
+ 
+ MAX_ITEMS = 10
+ MAX_TASK_CHARS = 120
+@@ -46,13 +46,18 @@
+     attendees: Sequence[str],
+     meeting_date: date,
+     model: Callable[[str], str],
++    aliases: Optional[Mapping[str, Sequence[str]]] = None,
+ ) -> List[ActionItem]:
+     """Return the action items found in `notes`, soonest deadline first.
+ 
+     `model` takes a prompt and returns text. Its answer is not trusted: lines
+-    that are not in the requested form are skipped, an owner who was not in
+-    the meeting becomes None, and so does a deadline that is not a real date
+-    or falls before the meeting.
++    that are not in the requested form are skipped, an owner who does not
++    name exactly one attendee becomes None, and so does a deadline that is not
++    a real date or falls before the meeting.
++
++    An owner may be written as a full name, a first or last name, a name with
++    an initial ("Ana R."), or one of the nicknames in `aliases`, which maps an
++    attendee's name as given to the nicknames that person goes by.
+     """
+     if not notes.strip():
+         return []
+@@ -64,7 +69,6 @@
+     )
+     answer = model(prompt)
+ 
+-    by_name = {_key(name): name for name in attendees}
+     items: List[ActionItem] = []
+     seen = set()
+     for line in answer.splitlines():
+@@ -76,7 +80,7 @@
+         task = _clean_task(fields[0])
+         if not task or _key(task) == "task":  # empty, or the header echoed back
+             continue
+-        owner = by_name.get(_key(fields[1]))
++        owner = _resolve_owner(fields[1], attendees, aliases or {})
+         due = _parse_due(fields[2], meeting_date)
+         if (_key(task), owner) in seen:
+             continue
+@@ -90,6 +94,48 @@
+ 
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
++
++
++def _name_key(text: str) -> str:
++    return _key(text.replace(".", " "))
++
++
++def _resolve_owner(
++    text: str,
++    attendees: Sequence[str],
++    aliases: Mapping[str, Sequence[str]],
++) -> Optional[str]:
++    """The one attendee that `text` names, or None if it names none or several.
++
++    Full names are tried first, then nicknames, then every word of `text` must
++    be a word of the attendee's name, with a single letter standing for the
++    start of a word. Anything less certain is left unassigned.
++    """
++    words = _name_key(text).split()
++    if not words or " ".join(words) in _EMPTY:
++        return None
++    wanted = " ".join(words)
++
++    matches = [name for name in attendees if _name_key(name) == wanted]
++    if not matches:
++        matches = [
++            name
++            for name in attendees
++            if wanted in {_name_key(nick) for nick in aliases.get(name, ())}
++        ]
++    if not matches:
++        matches = [name for name in attendees if _has_words(words, name)]
++
++    found = set(matches)
++    return found.pop() if len(found) == 1 else None
++
++
++def _has_words(words: List[str], name: str) -> bool:
++    parts = _name_key(name).split()
++    return all(
++        any(part == word or (len(word) == 1 and part.startswith(word)) for part in parts)
++        for word in words
++    )
+ 
+ 
+ def _clean_task(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -96,6 +96,49 @@
+     def test_explicit_none_owner(self):
+         self.assertIsNone(run("Find a caterer | none | none")[0].owner)
+ 
++    def test_first_name_is_resolved_to_the_attendee(self):
++        items = run(
++            "Look into the venue | Tom | none\n"
++            "Order the badges | Priya | none\n"
++        )
++        self.assertEqual([item.owner for item in items], ["Tom Becker", "Priya Raman"])
++
++    def test_last_name_and_initial_are_resolved(self):
++        items = run(
++            "Send the quote | Ruiz | none\n"
++            "Book the room | Becker | none\n"
++            "Order the badges | Priya R. | none\n"
++        )
++        self.assertEqual(
++            [item.owner for item in items], ["Ana Ruiz", "Tom Becker", "Priya Raman"]
++        )
++
++    def test_ambiguous_first_name_is_left_unassigned(self):
++        attendees = ["Ana Ruiz", "Ana Lopez"]
++        model = FakeModel("Send the quote | Ana | none\nSend the menu | Ana L. | none")
++        items = extract_action_items(NOTES, attendees, MEETING, model)
++        self.assertEqual(
++            [item.owner for item in items], [None, "Ana Lopez"]
++        )
++
++    def test_partly_matching_name_is_left_unassigned(self):
++        items = run("Approve the budget | Tom Smith | none")
++        self.assertEqual(items[0].owner, None)
++
++    def test_group_of_people_is_left_unassigned(self):
++        items = run("Pick the menu | Ana and Tom | none")
++        self.assertIsNone(items[0].owner)
++
++    def test_nickname_is_resolved_through_aliases(self):
++        model = FakeModel("Book the room | Tommy | none")
++        items = extract_action_items(
++            NOTES, ATTENDEES, MEETING, model, aliases={"Tom Becker": ["Tommy"]}
++        )
++        self.assertEqual(items[0].owner, "Tom Becker")
++
++    def test_nickname_without_aliases_is_left_unassigned(self):
++        self.assertIsNone(run("Book the room | Tommy | none")[0].owner)
++
+ 
+ class DueTest(unittest.TestCase):
+     def test_unreadable_or_impossible_date_becomes_none(self):

@@ -9,6 +9,7 @@ Blocked by: nothing
 
 - Both conditions run in the same session, so neither meets a different day of the models.
 - The sessions spend the user's usage: agree the spending budget, say that 24 are about to run and wait for a go.
+- Ticket 01 measured what a ticket weighs: $0.18 for the 24 trials and $1.21 for the 24 verdicts at API prices. The user let it run 6, then 18 at once.
 - A failed session is run again by the script; one that fails twice is reported, not dropped.
 
 ## Done when

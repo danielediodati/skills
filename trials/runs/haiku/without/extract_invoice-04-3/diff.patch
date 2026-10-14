@@ -1,0 +1,95 @@
+--- a/seam.py
++++ b/seam.py
+@@ -94,6 +94,8 @@
+ def _number(value, label):
+     if value is None or isinstance(value, bool):
+         raise InvoiceError(f"{label} is missing")
++    if isinstance(value, str):
++        value = _plain_decimal(value, label)
+     try:
+         number = Decimal(str(value).strip())
+     except InvalidOperation:
+@@ -103,5 +105,42 @@
+     return number
+ 
+ 
++def _plain_decimal(text, label):
++    """Turn a printed amount such as '1.250,00 EUR' into '1250.00'.
++
++    Dots and commas are read by position: the last one is the decimal mark and
++    the others group thousands. A lone separator followed by exactly three digits
++    ('1.250') could be either 1.25 or 1250, so it is refused rather than guessed.
++    """
++    s = re.sub(r"EUR|GBP|USD|CHF|€|£|\$", "", text.strip(), flags=re.IGNORECASE)
++    s = re.sub(r"[\s'  ]", "", s)
++    m = re.fullmatch(r"(-?)(\d+(?:[.,]\d+)*)", s)
++    if not m:
++        return text
++    sign, body = m.groups()
++    seps = [c for c in body if c in ".,"]
++    if not seps:
++        return sign + body
++    decimal = seps[-1]
++    if len(set(seps)) == 2:
++        if seps.count(decimal) != 1:
++            return text
++        thousands = "." if decimal == "," else ","
++        int_part, frac = body.split(decimal)
++        groups = int_part.split(thousands)
++        if not all(len(g) == 3 for g in groups[1:]):
++            return text
++        return sign + "".join(groups) + "." + frac
++    parts = body.split(decimal)
++    if len(parts) > 2:
++        if not all(len(g) == 3 for g in parts[1:]):
++            return text
++        return sign + "".join(parts)
++    int_part, frac = parts
++    if len(frac) == 3 and int_part != "0":
++        raise InvoiceError(f"{label} could be read two ways: {text!r}")
++    return sign + int_part + "." + frac
++
++
+ def _cents(amount):
+     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+--- a/test.py
++++ b/test.py
+@@ -100,6 +100,38 @@
+         with self.assertRaisesRegex(InvoiceError, "total is not a number"):
+             extract(total="three hundred")
+ 
++    def test_amounts_written_with_european_separators_are_read(self):
++        lines = [{"description": "Werkzeug", "quantity": "2", "unit_price": "2.340,50"}]
++        result = extract(lines=lines, total="4.681,00 EUR")
++        self.assertEqual(result["lines"][0]["unit_price"], Decimal("2340.50"))
++        self.assertEqual(result["total"], Decimal("4681.00"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_currency_symbols_and_spaces_in_amounts_are_ignored(self):
++        for printed, expected in [
++            ("€ 1.250,00", "1250.00"),
++            ("1 250,00 €", "1250.00"),
++            ("1 250,00", "1250.00"),
++            ("£1,250.00", "1250.00"),
++            ("1'250.00", "1250.00"),
++            ("-12,5", "-12.5"),
++        ]:
++            with self.subTest(printed=printed):
++                self.assertEqual(extract(total=printed)["total"], Decimal(expected).quantize(Decimal("0.01")))
++
++    def test_kessler_invoice_total_is_read(self):
++        result = extract(total="1.250,00")
++        self.assertEqual(result["total"], Decimal("1250.00"))
++
++    def test_lone_separator_with_three_digits_is_not_guessed(self):
++        with self.assertRaisesRegex(InvoiceError, "could be read two ways"):
++            extract(total="1.250")
++
++    def test_zero_point_three_digit_amount_is_still_a_decimal(self):
++        lines = [{"description": "Cable, m", "quantity": 3, "unit_price": "0.335"}]
++        result = extract(lines=lines, total="1.01")
++        self.assertEqual(result["lines"][0]["unit_price"], Decimal("0.335"))
++
+     def test_missing_quantity_is_an_error(self):
+         lines = [{"description": "Delivery", "unit_price": 15}]
+         with self.assertRaisesRegex(InvoiceError, "line 1 quantity is missing"):

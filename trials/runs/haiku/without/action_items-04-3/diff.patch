@@ -1,0 +1,127 @@
+--- a/README.md
++++ b/README.md
+@@ -9,7 +9,7 @@
+ The model reads the notes and writes the items. The code decides what is kept:
+ 
+ - lines of the answer that are not `task | owner | due` are skipped;
+-- an owner is kept only if it is the name of one of the attendees, and is returned spelled as the caller gave it; otherwise the item stays, with `owner` set to `None`;
++- an owner is kept only if it names exactly one of the attendees, by full name, first name, nickname ("Tommy" for "Tom Becker"), surname, or first name with an initial ("Ana R."), and is returned spelled as the caller gave the attendee; otherwise the item stays, with `owner` set to `None`;
+ - a deadline is kept only if it is a real date on or after the day of the meeting; otherwise `due` is `None`;
+ - a task repeated for the same owner is listed once, and a task longer than 120 characters is shortened.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -20,8 +20,8 @@
+ task | owner | due
+ 
+ - task: a short imperative sentence, e.g. "Send the revised quote to Halden".
+-- owner: the name of the person responsible, as written in the list above,
+-  or "none" if nobody took it.
++- owner: the person responsible, named as in the notes (a first name or
++  nickname is fine), or "none" if nobody took it.
+ - due: the deadline as YYYY-MM-DD, or "none" if no deadline was given.
+ 
+ If there are no action items, write only: NONE
+@@ -32,6 +32,7 @@
+ 
+ _EMPTY = {"", "none", "n/a", "-", "?", "tbd", "unassigned"}
+ _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
++_NICKNAME_MIN = 3  # shortest first name a nickname may be cut down to ("Tom")
+ 
+ 
+ @dataclass(frozen=True)
+@@ -64,7 +65,6 @@
+     )
+     answer = model(prompt)
+ 
+-    by_name = {_key(name): name for name in attendees}
+     items: List[ActionItem] = []
+     seen = set()
+     for line in answer.splitlines():
+@@ -76,7 +76,7 @@
+         task = _clean_task(fields[0])
+         if not task or _key(task) == "task":  # empty, or the header echoed back
+             continue
+-        owner = by_name.get(_key(fields[1]))
++        owner = _find_owner(fields[1], attendees)
+         due = _parse_due(fields[2], meeting_date)
+         if (_key(task), owner) in seen:
+             continue
+@@ -90,6 +90,42 @@
+ 
+ def _key(text: str) -> str:
+     return " ".join(text.split()).casefold()
++
++
++def _find_owner(text: str, attendees: Sequence[str]) -> Optional[str]:
++    """Return the one attendee that `text` names, or None if it names none or several.
++
++    Accepts the full name, a first name or nickname ("Tom" or "Tommy" for
++    "Tom Becker"), a surname, or a first name with an initial ("Ana R.").
++    """
++    wanted = _key(text).split()
++    if not wanted:
++        return None
++    full = [name for name in attendees if _key(name) == _key(text)]
++    if full:
++        return full[0]
++    matches = [name for name in attendees if _names(wanted, name)]
++    return matches[0] if len(matches) == 1 else None
++
++
++def _names(words: List[str], attendee: str) -> bool:
++    parts = _key(attendee).split()
++    first, last = parts[0], parts[-1]
++    if len(words) == 1:
++        return _is_nickname(words[0], first) or words[0] == last
++    if len(words) == 2:
++        return _is_nickname(words[0], first) and _is_initial(words[1], last)
++    return False
++
++
++def _is_nickname(word: str, first: str) -> bool:
++    word = word.rstrip(".")
++    shorter, longer = sorted((word, first), key=len)
++    return len(shorter) >= _NICKNAME_MIN and longer.startswith(shorter)
++
++
++def _is_initial(word: str, last: str) -> bool:
++    return word.rstrip(".") == last[:1]
+ 
+ 
+ def _clean_task(text: str) -> str:
+--- a/test.py
++++ b/test.py
+@@ -96,6 +96,32 @@
+     def test_explicit_none_owner(self):
+         self.assertIsNone(run("Find a caterer | none | none")[0].owner)
+ 
++    def test_first_name_resolves_to_the_attendee(self):
++        items = run(
++            "Look into the venue | Tom | none\n"
++            "Order the badges | Priya | none\n"
++        )
++        self.assertEqual([item.owner for item in items], ["Tom Becker", "Priya Raman"])
++
++    def test_nickname_resolves_to_the_attendee(self):
++        self.assertEqual(run("Look into the venue | Tommy | none")[0].owner, "Tom Becker")
++
++    def test_first_name_with_initial_resolves_to_the_attendee(self):
++        self.assertEqual(run("Send the quote | Ana R. | none")[0].owner, "Ana Ruiz")
++
++    def test_surname_resolves_to_the_attendee(self):
++        self.assertEqual(run("Book the room | Becker | none")[0].owner, "Tom Becker")
++
++    def test_ambiguous_first_name_is_left_unowned(self):
++        attendees = ["Tom Becker", "Tom Lindqvist"]
++        model = FakeModel("Book the room | Tom | none")
++        items = extract_action_items(NOTES, attendees, MEETING, model)
++        self.assertEqual(items, [ActionItem("Book the room", None, None)])
++
++    def test_nickname_must_be_a_real_shortening_of_the_first_name(self):
++        self.assertIsNone(run("Look into the venue | Ben | none")[0].owner)
++        self.assertIsNone(run("Look into the venue | T | none")[0].owner)
++
+ 
+ class DueTest(unittest.TestCase):
+     def test_unreadable_or_impossible_date_becomes_none(self):

@@ -1,0 +1,13 @@
+{
+  "trial": "triage_ticket-04-1",
+  "condition": "drafted",
+  "model": "claude-haiku-5-5",
+  "request": "seams/triage_ticket/requests/04.md",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 7,
+  "duration_ms": 28394,
+  "total_cost_usd": 0.005399269999999999,
+  "session_id": "1b5223d1-ec45-45fc-b7f4-ae056227e98c"
+}

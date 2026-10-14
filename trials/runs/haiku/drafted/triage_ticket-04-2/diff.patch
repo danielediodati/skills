@@ -1,0 +1,11 @@
+--- a/seam.py
++++ b/seam.py
+@@ -14,6 +14,8 @@
+ queue: one of {queues}
+ urgency: one of {urgencies}
+ summary: one sentence saying what the customer needs
++
++The body may open with earlier messages quoted in a reply, or with a pasted log or error output. Judge the ticket by what the customer is asking for now, wherever in the body they say it.
+ 
+ Subject: {subject}
+ 

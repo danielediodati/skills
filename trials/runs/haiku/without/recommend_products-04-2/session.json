@@ -1,0 +1,13 @@
+{
+  "trial": "recommend_products-04-2",
+  "condition": "without",
+  "model": "claude-haiku-5-5",
+  "request": "seams/recommend_products/requests/04.md",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 15,
+  "duration_ms": 43303,
+  "total_cost_usd": 0.007654540000000001,
+  "session_id": "695539ca-d15e-40e1-8e38-e1ff6e202e0f"
+}

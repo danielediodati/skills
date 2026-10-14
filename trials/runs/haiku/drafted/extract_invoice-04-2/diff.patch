@@ -1,0 +1,67 @@
+--- a/seam.py
++++ b/seam.py
+@@ -95,7 +95,7 @@
+     if value is None or isinstance(value, bool):
+         raise InvoiceError(f"{label} is missing")
+     try:
+-        number = Decimal(str(value).strip())
++        number = Decimal(_plain_decimal(str(value).strip()))
+     except InvalidOperation:
+         raise InvoiceError(f"{label} is not a number: {value!r}") from None
+     if not number.is_finite():
+@@ -103,5 +103,19 @@
+     return number
+ 
+ 
++def _plain_decimal(text):
++    # "1.250,00" (German, Italian) and "1,250.00" (English) both mean
++    # 1250.00: the separator written last is the decimal mark, the other
++    # is a thousands separator. A lone comma is a decimal mark only when
++    # one or two digits follow it, since "1,250" could mean either.
++    if "," in text and "." in text:
++        if text.rfind(",") > text.rfind("."):
++            return text.replace(".", "").replace(",", ".")
++        return text.replace(",", "")
++    if re.fullmatch(r"[+-]?\d+,\d{1,2}", text):
++        return text.replace(",", ".")
++    return text
++
++
+ def _cents(amount):
+     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+--- a/test.py
++++ b/test.py
+@@ -105,6 +105,33 @@
+         with self.assertRaisesRegex(InvoiceError, "line 1 quantity is missing"):
+             extract(lines=lines)
+ 
++    def test_german_amounts_are_read(self):
++        lines = [{"description": "Werkzeug", "quantity": 1, "unit_price": "1.250,00"}]
++        result = extract(lines=lines, total="1.250,00")
++        self.assertEqual(result["lines"][0]["amount"], Decimal("1250.00"))
++        self.assertEqual(result["total"], Decimal("1250.00"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_italian_amounts_are_read(self):
++        lines = [
++            {"description": "Carta", "quantity": 2, "unit_price": "2.340,50"},
++            {"description": "Trasporto", "quantity": "1", "unit_price": "12,5"},
++        ]
++        result = extract(lines=lines, total="4.693,50")
++        self.assertEqual(result["lines"][0]["unit_price"], Decimal("2340.50"))
++        self.assertEqual(result["lines"][1]["unit_price"], Decimal("12.5"))
++        self.assertEqual(result["total"], Decimal("4693.50"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_english_thousands_are_read(self):
++        result = extract(total="1,250.00")
++        self.assertEqual(result["total"], Decimal("1250.00"))
++
++    def test_comma_thousands_without_decimals_is_refused(self):
++        # "1,250" could be 1250 or 1.25, so it is not guessed at.
++        with self.assertRaisesRegex(InvoiceError, "total is not a number"):
++            extract(total="1,250")
++
+     def test_empty_text_is_refused_before_asking_the_model(self):
+         model = FakeModel(json.dumps(ANSWER))
+         with self.assertRaises(InvoiceError):

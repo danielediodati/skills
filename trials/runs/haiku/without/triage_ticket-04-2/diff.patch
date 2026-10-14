@@ -1,0 +1,134 @@
+--- a/README.md
++++ b/README.md
+@@ -11,6 +11,8 @@
+ - `summary`: a single line of at most 120 characters, shown in the agents' ticket list
+ - `respond_within_hours`: 72, 24, 8 or 1, depending on the urgency
+ 
++Before the model sees the body, quoted reply text (lines starting with `>`, anything after an "Original Message" marker) is removed, so a customer's new message is read even when it comes after a long quoted thread. A body still over 3000 characters is shortened to its first 1000 and last 2000 characters, so a request at the end of a long log or story is kept.
++
+ Anything the model answers outside these lists is replaced by `general` and `normal`. A ticket with neither subject nor body raises `ValueError`.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -5,7 +5,9 @@
+ QUEUES = ("billing", "technical", "account", "shipping", "general")
+ URGENCIES = ("low", "normal", "high", "urgent")
+ RESPOND_WITHIN_HOURS = {"low": 72, "normal": 24, "high": 8, "urgent": 1}
+-MAX_BODY_CHARS = 2000
++MAX_BODY_CHARS = 3000
++HEAD_CHARS = 1000
++TAIL_CHARS = 2000
+ MAX_SUMMARY_CHARS = 120
+ 
+ PROMPT = """You triage customer support tickets.
+@@ -15,12 +17,18 @@
+ urgency: one of {urgencies}
+ summary: one sentence saying what the customer needs
+ 
++The customer's current request can appear anywhere in the message, including
++after a long quoted reply or a log. Route and summarise on what they are asking
++for now, not on the first thing they wrote.
++
+ Subject: {subject}
+ 
+ {body}
+ """
+ 
+ FIELD = re.compile(r"^\W*(queue|urgency|summary)\W*:\s*(.+)$", re.IGNORECASE)
++ORIGINAL_MESSAGE = re.compile(r"^\s*-{2,}\s*original message\s*-{2,}\s*$", re.IGNORECASE)
++QUOTE_HEADER = re.compile(r"^\s*on .+ wrote:\s*$", re.IGNORECASE)
+ 
+ 
+ def triage_ticket(ticket, model):
+@@ -38,7 +46,7 @@
+         queues=", ".join(QUEUES),
+         urgencies=", ".join(URGENCIES),
+         subject=subject,
+-        body=body[:MAX_BODY_CHARS],
++        body=_shorten(_without_quoted_history(body)),
+     ))
+     fields = _parse_fields(answer)
+ 
+@@ -58,6 +66,31 @@
+     }
+ 
+ 
++def _without_quoted_history(body):
++    """Drop the earlier messages a mail client quotes into a reply.
++
++    Quoted lines start with ">". An "Original Message" marker means the
++    quoted thread follows it, so everything from there on is dropped.
++    If nothing is left, the body is used as it was.
++    """
++    kept = []
++    for line in body.splitlines():
++        if ORIGINAL_MESSAGE.match(line):
++            break
++        if line.lstrip().startswith(">") or QUOTE_HEADER.match(line):
++            continue
++        kept.append(line)
++    stripped = "\n".join(kept).strip()
++    return stripped or body
++
++
++def _shorten(body):
++    """Keep the start and the end of a long body, since either can hold the request."""
++    if len(body) <= MAX_BODY_CHARS:
++        return body
++    return body[:HEAD_CHARS] + "\n[... middle of message omitted ...]\n" + body[-TAIL_CHARS:]
++
++
+ def _parse_fields(answer):
+     fields = {}
+     for line in answer.splitlines():
+--- a/test.py
++++ b/test.py
+@@ -82,10 +82,44 @@
+         self.assertTrue(result["summary"].startswith("a b ccc"))
+         self.assertEqual(len(result["summary"]), 120)
+ 
+-    def test_only_the_start_of_a_long_body_is_sent(self):
++    def test_end_of_a_long_body_is_sent(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")
+-        triage_ticket({"subject": "Hi", "body": "x" * 2000 + "TAIL"}, model)
+-        self.assertNotIn("TAIL", model.prompts[0])
++        triage_ticket({"subject": "Hi", "body": "HEAD" + "x" * 5000 + "TAIL"}, model)
++        self.assertIn("HEAD", model.prompts[0])
++        self.assertIn("TAIL", model.prompts[0])
++        self.assertIn("middle of message omitted", model.prompts[0])
++
++    def test_question_after_a_long_quote_reaches_the_model(self):
++        quote = "\n".join("> earlier message line %d" % i for i in range(300))
++        body = quote + "\n\nMy card was charged 1,480 EUR instead of 148 EUR. Please reverse it."
++        model = FakeModel("queue: billing\nurgency: high\nsummary: x")
++        triage_ticket({"subject": "Re: delivery address", "body": body, "tier": "pro"}, model)
++        self.assertIn("charged 1,480 EUR", model.prompts[0])
++        self.assertNotIn("earlier message line", model.prompts[0])
++
++    def test_text_after_an_original_message_marker_is_dropped(self):
++        body = (
++            "Please refund the duplicate charge.\n\n"
++            "-----Original Message-----\n"
++            "From: Support\nSubject: Your invoice\n\nOld text here."
++        )
++        model = FakeModel("queue: billing\nurgency: low\nsummary: x")
++        triage_ticket({"subject": "Re", "body": body}, model)
++        self.assertIn("Please refund", model.prompts[0])
++        self.assertNotIn("Old text here", model.prompts[0])
++
++    def test_quote_header_line_is_dropped_but_reply_is_kept(self):
++        body = "On Mon, 12 Oct 2026, Support wrote:\n> old\n\nStill charged, please help."
++        model = FakeModel("queue: billing\nurgency: low\nsummary: x")
++        triage_ticket({"subject": "Re", "body": body}, model)
++        self.assertNotIn("wrote:", model.prompts[0])
++        self.assertIn("Still charged, please help.", model.prompts[0])
++
++    def test_body_that_is_all_quote_is_sent_as_written(self):
++        body = "> the only thing I have is a quote"
++        model = FakeModel("queue: general\nurgency: low\nsummary: x")
++        triage_ticket({"subject": "Fwd", "body": body}, model)
++        self.assertIn("the only thing I have is a quote", model.prompts[0])
+ 
+     def test_empty_ticket_is_refused_before_asking_the_model(self):
+         model = FakeModel("queue: general\nurgency: low\nsummary: x")

@@ -1,0 +1,90 @@
+--- a/README.md
++++ b/README.md
+@@ -6,6 +6,8 @@
+ 
+ The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
+ 
++Amounts may be written the way the supplier prints them: `1.250,00` and `1 250,00` (German, Italian, French style), `1,250.00` (British style), with or without a currency sign or code. A separator repeated, or followed by exactly three digits, counts as a thousands separator, so `1.250` reads as 1250; `0.335` reads as 0.335.
++
+ If the model's answer can't be read, or a field is missing or malformed, the function raises `InvoiceError` with a message naming the field.
+ 
+ Run the tests with `python -m unittest` from this directory.
+--- a/seam.py
++++ b/seam.py
+@@ -95,7 +95,7 @@
+     if value is None or isinstance(value, bool):
+         raise InvoiceError(f"{label} is missing")
+     try:
+-        number = Decimal(str(value).strip())
++        number = _decimal(str(value))
+     except InvalidOperation:
+         raise InvoiceError(f"{label} is not a number: {value!r}") from None
+     if not number.is_finite():
+@@ -103,5 +103,34 @@
+     return number
+ 
+ 
++def _decimal(text):
++    # Suppliers print amounts their own way: "1.250,00" (Germany, Italy),
++    # "1 250,00" (France), "1,250.00" (Britain). The last separator is the
++    # decimal point, unless the separators are the same and repeated ("1.250.000")
++    # or a lone separator is followed by three digits ("1.250"), which makes it
++    # a thousands separator. "0.335" stays a decimal because the integer part is 0.
++    cleaned = re.sub(r"[\s'  ]", "", text)
++    match = re.fullmatch(r"[^\d+-]*([-+]?\d[\d.,]*)\D*", cleaned)
++    if not match:
++        raise InvalidOperation(text)
++    sign = "-" if match.group(1).startswith("-") else ""
++    body = match.group(1).lstrip("+-")
++
++    dots, commas = body.count("."), body.count(",")
++    last = max(body.rfind("."), body.rfind(","))
++    decimal = None
++    if dots and commas:
++        decimal = body[last]
++    elif dots + commas == 1 and not (len(body) - last - 1 == 3 and body[:last] != "0"):
++        decimal = body[last]
++
++    if decimal:
++        integer, fraction = body.rsplit(decimal, 1)
++    else:
++        integer, fraction = body, ""
++    integer = re.sub(r"[.,]", "", integer)
++    return Decimal(f"{sign}{integer}.{fraction}" if fraction else f"{sign}{integer}")
++
++
+ def _cents(amount):
+     return amount.quantize(CENT, rounding=ROUND_HALF_UP)
+--- a/test.py
++++ b/test.py
+@@ -65,6 +65,30 @@
+         self.assertEqual(result["lines"][0]["amount"], Decimal("1.01"))
+         self.assertEqual(result["status"], "ok")
+ 
++    def test_amounts_written_with_a_decimal_comma_are_read(self):
++        lines = [{"description": "Werkzeug", "quantity": 1, "unit_price": "1.250,00"}]
++        result = extract(lines=lines, total="1.250,00 EUR")
++        self.assertEqual(result["lines"][0]["unit_price"], Decimal("1250.00"))
++        self.assertEqual(result["total"], Decimal("1250.00"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_amounts_are_read_in_the_writing_of_the_suppliers_country(self):
++        cases = {
++            "1.250,00": "1250.00",
++            "€ 1.250,00": "1250.00",
++            "1.250.000,00": "1250000.00",
++            "1 250,00": "1250.00",
++            "1,250.00": "1250.00",
++            "1.250": "1250.00",
++            "1250,5": "1250.50",
++        }
++        for text, expected in cases.items():
++            with self.subTest(text=text):
++                lines = [{"description": "Item", "quantity": 1, "unit_price": text}]
++                result = extract(lines=lines, total=text)
++                self.assertEqual(result["total"], Decimal(expected))
++                self.assertEqual(result["status"], "ok")
++
+     def test_invoice_text_reaches_the_model(self):
+         model = FakeModel(json.dumps(ANSWER))
+         extract_invoice(INVOICE_TEXT, model)
