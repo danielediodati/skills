@@ -7,7 +7,7 @@ Blocked by: 03, 04
 
 The repository public on GitHub, at `0.8.0`.
 
-- `main`, `session-7-reps` and the version tags pushed, each replacing what the private remote holds: there they are still the history before ticket 03 rewrote it.
+- `main`, `session-7-reps` and the version tags pushed.
 - A last look from GitHub: the README as it renders, the branches, the tags.
 - The visibility changed by the user, by hand.
 
