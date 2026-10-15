@@ -8,7 +8,6 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 **Shows**: the repository public on GitHub, with a README that teaches the plugin through one example and states what the numbers do and do not show.
 
-2. **The tree cleaned.** Nothing of the author's machine - [ticket](docs/work/8-public-repo/issues/02-the-tree-cleaned.md)
 3. **The history cleaned.** One rewrite before anything is public - [ticket](docs/work/8-public-repo/issues/03-the-history-cleaned.md)
 4. **The README.** The problem, the plugin, one example, the numbers - [ticket](docs/work/8-public-repo/issues/04-the-readme.md)
 5. **Public.** Pushed, checked, made public by the user - [ticket](docs/work/8-public-repo/issues/05-public.md)
