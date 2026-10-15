@@ -1,6 +1,6 @@
 # REPS: drift episodes and declared moves
 
-The real-project counterpart of `trials/seams/`: drift episodes and declared moves from the history of REPS (`https://github.com/danielediodati/REPS`), found for ticket 7.1. Each case is a folder with a `README.md` (the line, the commits, how it was caught or declared) and a `request.md` (what a replay hands the agent).
+The real-project counterpart of `trials/seams/`: drift episodes and declared moves from the history of REPS (`https://github.com/danielediodati/REPS`), found for ticket 7.1. Each case is a folder with a `README.md` (the line, the commits, how it was caught or declared) and a `request.md` (what a replay hands the agent). A case chosen for the replay also has a `line.md`, the line its runs are judged on, and its charter drafts sit in `trials/charters-auto/<model>/<case>-<seam>-<n>.md` (`trials/protocol-reps-replay.md`).
 
 Every case runs **from** commit a, the last state where the decision sat where the design put it, **to** commit b, the commit that put it back or made the move. REPS's code is not copied here: a case is read at its commits. The user's messages are paraphrased, each with its date.
 
