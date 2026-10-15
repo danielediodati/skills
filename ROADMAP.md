@@ -19,7 +19,6 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 **Shows**: the repository public on GitHub, with a README that teaches the plugin through one example and states what the numbers do and do not show.
 
-5. **Public.** Pushed, checked, made public by the user - [ticket](docs/work/8-public-repo/issues/05-public.md)
 
 ## Parked
 
