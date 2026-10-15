@@ -283,7 +283,7 @@ class RepsCases(unittest.TestCase):
     def test_each_chosen_case_has_a_parent_a_request_one_line_and_its_seams(self):
         runner, judge = load(RUN_TRIALS), load(RUN_JUDGE)
         for name, parent in (("E1", "674648c"), ("E2", "a9b2c50"), ("E7", "521bce2"), ("E5", "f82c382"),
-                             ("D3", "d9ee707"), ("D4", "c2e8e2a")):
+                             ("E6", "ed911df"), ("D3", "d9ee707"), ("D4", "c2e8e2a")):
             folder, found, seams = runner.reps_case(name)
             self.assertEqual(found, parent, name)
             self.assertTrue((folder / "request.md").read_text(encoding="utf-8").strip(), name)

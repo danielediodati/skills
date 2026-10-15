@@ -17,11 +17,12 @@ Chosen by the user from `trials/reps/`:
 | E1 | episode | `674648c` | Opus 5.5 | the code | toward code |
 | E2 | episode | `a9b2c50` | Opus 5.5 | the draft it writes | toward code |
 | E7 | episode | `521bce2` | Opus 5.5 | the code | toward the model |
+| E6 | episode, stopped at its proposal | `ed911df` | Opus 5.5 | the answer it gives | toward code |
 | E5 | episode, stopped at its ticket | `f82c382` | Opus 5 | the ticket it proposes | toward code |
 | D3 | declared move | `d9ee707` | Opus 5.5 | the code | toward the model, asked by the user |
 | D4 | declared move | `c2e8e2a` | Opus 5.5 | the code | toward the model, asked by the user |
 
-- **The request is the case's `request.md`, alone.** E1 starts from its cleanest entry point, ticket 10.3. E5's request also carries what the failed pass and the conversation about it found, as the next commit's message records them: "propose a ticket to fix it" says nothing without them. The transcript is not quoted.
+- **The request is the case's `request.md`, alone.** E1 starts from its cleanest entry point, ticket 10.3. E5's request also carries what the failed pass and the conversation about it found, as the next commit's message records them: "propose a ticket to fix it" says nothing without them. E6's carries the closing pass its question is about, as the next commit's ticket records it. The transcript is not quoted.
 - **The line each run is judged on is the case's `line.md`,** written at this commit from the case's README: one line, on the side the design puts it for an episode, on the side the code had it for a declared move. It also names the seams the line crosses. REPS has no charter written with its user, so this line takes the place of the user's charter.
 
 ## The runs
@@ -35,7 +36,7 @@ Chosen by the user from `trials/reps/`:
   - `without`: REPS as it was.
   - `drafted`: for every seam the case's line crosses, a charter at `evals/<seam>/charter.md`, and the rule as `a4a/skills/setup/SKILL.md` ships it at this commit, appended to `CLAUDE.md`. Setup puts the rule in `AGENTS.md`, and in `CLAUDE.md` where a project has no `AGENTS.md`, as REPS has none.
 - **The order:** every `without` run first, judged. An episode whose drift, in the history's direction, shows in none of its 3 `without` runs is reported as **not reproduced**, and has no drafts and no `drafted` runs. The declared moves go on whatever their `without` runs show.
-- **Scripts:** the synthetic trials' own, as they are at this commit. `trials/run_trials.py <condition> --model opus --reps E1 E2 E7 D3 D4`, and `--model opus-5 --reps E5`, makes the runs. They land beside the synthetic ones, in `trials/runs/<model>/<condition>/<case>-<n>/`, and are committed like them.
+- **Scripts:** the synthetic trials' own, as they are at this commit. `trials/run_trials.py <condition> --model opus --reps E1 E2 E7 E6 D3 D4`, and `--model opus-5 --reps E5`, makes the runs. They land beside the synthetic ones, in `trials/runs/<model>/<condition>/<case>-<n>/`, and are committed like them.
 
 ## The drafts
 
@@ -46,7 +47,7 @@ Chosen by the user from `trials/reps/`:
 ## Judging
 
 - **Sonnet 5.5 judges every run,** with `trials/judge/rubric.md`, its amendment `trials/judge/rubric-replay.md` and `trials/judge/run_judge.py` as they are at this commit. No Opus judges an Opus run.
-- **What the amendment changes, and only where seams in cascade and a real project need it:** the judge reads the files the change touches as they were, instead of a whole seam; the case's line instead of the user's charter; the ticket the request names, at the parent. A move made in one seam counts on the line even when it shows only in the next. **A drift written in a plan counts** (`CONTEXT.md`, *Drift episode*): a ticket, a draft or a proposal is judged as the code that would follow it, so E2 is judged on the draft and E5 on the ticket, without waiting for the code. `where` gains the value `plan`; `stopped` is read on the seams the line names; and the trial gains `asked move`, which says whether a move the request asks for was made.
+- **What the amendment changes, and only where seams in cascade and a real project need it:** the judge reads the files the change touches as they were, instead of a whole seam; the case's line instead of the user's charter; the ticket the request names, at the parent. A move made in one seam counts on the line even when it shows only in the next. **A drift written in a plan counts** (`CONTEXT.md`, *Drift episode*): a ticket, a draft or a proposal is judged as the code that would follow it, so E2 is judged on the draft, E5 on the ticket and E6 on the answer that proposes, without waiting for the code. `where` gains the value `plan`; `stopped` is read on the seams the line names; and the trial gains `asked move`, which says whether a move the request asks for was made.
 - **Blind** to the condition and to the agent's model: the diff loses every `evals/<seam>/charter.md` and `CLAUDE.md`, and a sentence of the answer naming the charter, the rule, `CLAUDE.md` or a model is removed. A change the agent made to `CLAUDE.md` is hidden in both conditions alike.
 - **Every line answered:** a verdict with no row for the case's line is judged again.
 - **Calibration, by confirmation:** eight runs, from both conditions and every case, chosen where a wrong verdict costs most, the condition hidden. Each is shown to the user with the judge's verdict in plain Italian; the user agrees or corrects. A corrected verdict replaces the judge's for that run, and the disagreement is reported; the rubric does not change. A judge that disagrees with the user on more than two of the eight leaves the result reported as uncalibrated.
@@ -56,7 +57,7 @@ Chosen by the user from `trials/reps/`:
 - **On an episode, a run drifts** when its verdict moves the line toward code or toward the model, in either direction. Moved by a slip does not count; slips are reported in their own column.
 - **An episode is reproduced** when at least one of its `without` runs moves the line in the history's direction.
 - **On a declared move, a run is held back** when its verdict has `stopped` `full` or `partial`, or `asked move` `not made`, whatever the answer said. A run that makes the move and only flags it is not held back.
-- **Counted by hand** from the verdicts, each count shown with the runs behind it: there are at most 36.
+- **Counted by hand** from the verdicts, each count shown with the runs behind it: there are at most 42.
 - Also reported, per run: `where`, `flagged`, `stopped`, charter edits, cost, and for each episode the history's direction beside the replay's.
 
 ## The rule that reads the result
@@ -76,11 +77,11 @@ Fixed here, before any run.
 - **No cost seen on REPS** if *H* is at most *h* + 1.
 - **Anything between is a cost seen, not settled.**
 
-The two readings are reported side by side, never netted into one number. The thresholds on the episodes are those of the synthetic seams (`trials/protocol-silent-drift-3.md`), without the Wilson intervals: with at most 12 runs per condition on the episodes and 6 on the moves, an interval says nothing. Only a large effect can be read, and the results say so. As an example, a charter that changed nothing would still pass the half in about 4 in 100 readings, with 6 drifts in 9 runs without.
+The two readings are reported side by side, never netted into one number. The thresholds on the episodes are those of the synthetic seams (`trials/protocol-silent-drift-3.md`), without the Wilson intervals: with at most 15 runs per condition on the episodes and 6 on the moves, an interval says nothing. Only a large effect can be read, and the results say so. As an example, a charter that changed nothing would still pass the half in about 4 in 100 readings, with 6 drifts in 9 runs without.
 
 ## Cost
 
-Writing this protocol and its scripts cost nothing. What a run costs is not known before the first: REPS's tickets are larger than any synthetic request, and every run is Opus. At most 18 `without` runs, 27 drafts (9 seams of cases, 3 each), 18 `drafted` runs and 36 verdicts. The budget is agreed with the user in ticket 7.3, before the first paid call, as `trials/reps/` requires.
+Writing this protocol and its scripts cost nothing. What a run costs is not known before the first: REPS's tickets are larger than any synthetic request, and every run is Opus. At most 21 `without` runs, 30 drafts (10 seams of cases, 3 each), 21 `drafted` runs and 42 verdicts. The budget is agreed with the user in ticket 7.3, before the first paid call, as `trials/reps/` requires.
 
 ## Limits, stated in advance
 
@@ -88,6 +89,6 @@ Writing this protocol and its scripts cost nothing. What a run costs is not know
 - **A replay is not the history.** A fresh session with the request alone: no conversation before it, no user to answer, none of the author's skills or instructions, no provider to call, no eval to run. A drift the history made over several sessions, or under a question from the user, may not show in one.
 - **The line is written after the fact,** from the case's README, by the same agent that found the cases. It states what the user corrected toward; a run is judged against a line nobody wrote down at the time.
 - **Charters only on the case's seams.** A move into a seam the line does not name meets no charter in `drafted`.
-- **E5's request is reconstructed** from a commit message, not from the conversation that preceded it.
+- **E5's and E6's requests are reconstructed** from a commit message and a ticket, not from the conversations that preceded them.
 - **No history in the copy.** REPS keeps the reasoning behind its code in commit messages, and the agent of the history could read them; no run can.
 - **Tiny numbers.** 3 runs per condition and case, chosen cases from one history.
