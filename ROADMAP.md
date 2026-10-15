@@ -14,11 +14,7 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 | 4 | `0.4.0` | 24 charters drafted from the code by Sonnet and Haiku, read line by line against the user's |
 | 5 | `0.5.0` | A README section with Sonnet's silent drift rate, with no charter and with an unread one it wrote, with intervals |
 | 6 | `0.6.0` | Haiku's rate beside Sonnet's in the README, each with its intervals |
-
-## Session 8 - `0.8.0` - The repository public
-
-**Shows**: the repository public on GitHub, with a README that teaches the plugin through one example and states what the numbers do and do not show.
-
+| 8 | `0.8.0` | The repository public on GitHub, its history rewritten clean, with a README that teaches the plugin through one example |
 
 ## Parked
 
