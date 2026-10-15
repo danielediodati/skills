@@ -10,7 +10,6 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 Every number before this one comes from four synthetic seams of one file each. REPS is a real project with seams in cascade, built by Opus.
 
-2. **Freeze the replay protocol.** Before any paid call - [ticket](docs/work/7-real-project/issues/02-replay-protocol.md)
 3. **Replay the episodes.** With Opus, 3 runs per condition - [ticket](docs/work/7-real-project/issues/03-replay.md)
 
 ## Parked
