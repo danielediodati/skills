@@ -3,7 +3,10 @@
   "owner": {
     "name": "Daniele Diodati"
   },
-  "description": "Daniele Diodati's plugins for Claude Code.",
+  "metadata": {
+    "description": "Daniele Diodati's plugins for Claude Code.",
+    "version": "0.8.0"
+  },
   "plugins": [
     {
       "name": "a4a",
