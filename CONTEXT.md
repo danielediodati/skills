@@ -45,7 +45,7 @@ a4a/skills/<skill>/SKILL.md
 | **Substitution** | Programmatic drift where code takes the decision in place of the model: a value fixed in a constant, a canned reply. |
 | **Templating** | Programmatic drift where the model still decides, but only by picking from a closed list prepared in advance. |
 | **Over-delegation** | The opposite drift: a constraint dissolving into model judgement (the model does arithmetic the code owned, or may invent a value that had to come from a list). |
-| **Drift episode** | Drift as it happens in a real project's history: the run of commits from the last state where a decision sat where the design put it to the first state where it sits on the other side, with the requests that led there. Rarely one commit: each step looks harmless alone. It counts as drift only if nothing written at the time (ADR, ticket, glossary, commit message) declares the move; a declared move is a decision, kept for contrast. |
+| **Drift episode** | Drift as it happens in a real project's history: the run of commits from the last state where a decision sat where the design put it to the first state where it sits on the other side, with the requests that led there. Rarely one commit: each step looks harmless alone. A drift written in a plan (a spec, a ticket, a draft, a proposal) and stopped by the user before any code counts too: only the user's review kept it out, at a cost in time. A move is a decision, kept for contrast, only when the user made it or accepted and kept it; a move the agent wrote down and the user corrected is drift. |
 | **Seam** | The boundary where a module's interface lives and where it is tested. |
 | **Deterministic seam** | Same input, same output. Tested with unit tests (TDD). |
 | **Stochastic seam** | Output produced by a model: prompt, graph node, routing, tool choice, retrieval, sub-agent, fine-tune. It varies from run to run, so it is tested with evals (EDD). A model call stays a stochastic seam even at temperature 0. The practical test: it has its own eval suite. Usually an agent; sometimes a router, a single prompt or a model judge. The inner steps of an agent are not seams until they are evaluated on their own. |
@@ -83,7 +83,7 @@ Weak spots that are standing limits, not work to do.
 - **Spotting drift in a diff takes judgement.** Telling a legitimate constraint (a closed list of valid ids) from templating (a closed list of styles) is not mechanical, and false alarms would get the check ignored.
 - **A charter can go stale.** If the line moves on purpose and the charter is not amended in the same change, the charter becomes the wrong thing.
 - **The vocabulary is heavy.** Seam, stochastic seam, charter, drift, substitution, templating, over-delegation, target, noise floor.
-- **Over-delegation has no real episode behind it.** Substitution and templating were derived from one project's documents and confirmed in passing.
+- **Over-delegation has one real episode behind it, an omission.** A library default left a schema unenforced in REPS (`trials/reps/`, E7); nobody chose the move. Substitution and templating were derived from one project's documents and confirmed in passing.
 - **The process is heavy for a small project.** A charter, an eval set and the loop for every seam is a lot. The charter is cheap, and the agent writes it alone; the eval set is not.
 
 ## Conventions for skills
