@@ -28,6 +28,7 @@ Every number before this one comes from four synthetic seams of one file each. R
 
 No session yet.
 
+- **The evals in a repository of their own**, the synthetic seams' and REPS's, after session 7 closes: to grill before it becomes a session. The plugin ships without 7 MB of runs; the evals pin the plugin they measure, and the README points to them.
 - Hosts other than Claude Code (version 2).
 - Candidate skills: `budget`, `agent-topology`, `failure-triage`, `context-budget`.
 - The author's personal `roadmap` skill, outside this repo: support for GitHub Issues, sessions against milestones.
