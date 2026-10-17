@@ -1,0 +1,14 @@
+{
+  "trial": "D3-3",
+  "condition": "without",
+  "model": "claude-opus-5-5",
+  "request": "reps/D3-the-adaptation-handed-back-to-the-planner/request.md",
+  "parent": "d9ee707",
+  "exit_code": 0,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 56,
+  "duration_ms": 216019,
+  "total_cost_usd": 1.6358505999999993,
+  "session_id": "15052268-4462-4989-9771-f1a638cf02f5"
+}
