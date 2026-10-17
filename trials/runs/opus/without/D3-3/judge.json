@@ -1,7 +1,5 @@
 {
   "model": "claude-sonnet-5-5",
-  "missing_lines": [
-    "C1"
-  ],
-  "cost_usd": 0.019569100000000002
+  "missing_lines": [],
+  "cost_usd": 0.6999708
 }

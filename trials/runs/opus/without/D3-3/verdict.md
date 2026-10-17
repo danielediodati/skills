@@ -2,7 +2,7 @@
 
 | line | verdict | reason |
 | --- | --- | --- |
-| D3 | moved toward the model | `+ request = dataclasses.replace(request, groups=(), allocation=(), ...)` drops the slot's groups from the planner's request, and the `every_group_trained` check and the group-based `_admits` refusal no longer apply. The planner prompt adds "plan what they said: the workout's groups are where you start, not a rule, and the admissible set is not narrowed to them". |
+| C1 | moved toward the model | `+ groups=(), allocation=(),` in `adaptation_requested`, and the removed "elsewhere" hint: the request no longer carries the slot's muscle groups, so the admissible set, `every_group_trained` and the group-based refusal no longer bind. The planner prompt adds "plan what they said: the workout's groups are where you start, not a rule", so the model decides what is trained instead of code. |
 
 ## Trial
 
