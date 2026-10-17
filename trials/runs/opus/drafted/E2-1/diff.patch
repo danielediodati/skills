@@ -1,0 +1,86 @@
+--- /dev/null
++++ b/docs/methodology.md
+@@ -0,0 +1,74 @@
++# Methodology
++
++What a good workout is, for the planner to weigh. Written by a human (TRAINER.md, *Stores*); the agent reads it and never edits it.
++
++**Status: draft.** Every number below is a placeholder until the user confirms it. Sources were cited from memory and have not been checked against the papers yet.
++
++Everything here is a criterion, not a rule. The validator checks legality (ADR-0010); nothing in this file is checked by code, and none of it may become a constant (ADR-0001).
++
++## Words
++
++| term | meaning here |
++|---|---|
++| **working set** | one round of one exercise taken close to failure: about 0-3 reps in reserve. Warm-up rounds are not working sets. |
++| **hard sets per muscle** | working sets whose exercise has that muscle as primary, counted per cycle. |
++| **variant** | an exercise that trains the same pattern and the same primary muscles as another in the plan (e.g. two push-up angles). |
++
++## How much
++
++| question | guidance | source |
++|---|---|---|
++| hard sets per muscle per cycle | about **10-20** for growth; about **4-6** keeps what is there | [1], [2] |
++| hard sets per muscle per workout | about **6-10**; past that, more sets add little and cost time | [1] |
++| exercises per group per workout | small group (arms, shoulders, core): **1 per muscle**. Large group (legs, back, chest): **2-3**, on different patterns | — |
++| working sets per exercise | **2-4** | [3] |
++| reps | **5-30** all grow muscle when the set ends near failure; under 6 for strength | [4] |
++| variants in one workout | at most **one** besides the original, and only when the group has nothing else admissible | — |
++
++**Bodyweight and bands.** Load cannot be added, so a working set is set by reps in reserve, not by a rep count. 8 reps of a push-up the user can do 25 of is not a working set. Prefer the harder variant, a slower tempo or a longer range over adding a second variant [4].
++
++> **Yours:** the volume band for your goal, and whether a cycle of N workouts should be read as a week.
++
++## Rest
++
++| intent | rest after a round | source |
++|---|---|---|
++| strength, heavy multi-joint | **2-3 min**, up to 5 | [3], [5] |
++| hypertrophy, multi-joint | **at least 2 min**; 60 s costs volume | [5], [6] |
++| hypertrophy, isolation | **60-90 s** | [6] |
++| conditioning, timed work | as short as the work allows | [7] |
++
++A superset of antagonists rests after the pair, not between the two: each muscle rests while the other works [8].
++
++> **Yours:** whether these replace the reference bands in TRAINER.md and `PLANNING`, or sit beside them.
++
++## Which structure
++
++| structure | reach for it when | not when |
++|---|---|---|
++| **straight sets** | the main lift of the workout; strength; any exercise that needs setup or a heavy load | — |
++| **superset** | two exercises for **opposing** muscles or unrelated groups (push/pull, biceps/triceps, upper/lower): saves time at little cost to either [8] | both exercises train the same muscle: the second is done fatigued, and the pair is one long set |
++| **circuit** | the goal is conditioning, or every exercise is light accessory or core work, and each station trains a **different** muscle [7] | it holds two exercises for the same muscle; it holds the workout's main work; it is chosen because it is cheap |
++
++**Time is not a reason to choose a shape.** A circuit pays one rest per round instead of one per exercise, so it always fits a budget more easily. When there is time left, spend it on working sets of the exercises already in the plan before adding exercises to a block.
++
++**What the first real plan got wrong** (ticket 11.2): four push-up variants in one circuit at 8 reps is chest working with no rest and no set near failure, then five triceps exercises the same way. Against this page: too many variants, a circuit of one muscle, sets far from failure, 20 minutes left unspent.
++
++## Order
++
++1. Multi-joint before single-joint; the exercise that matters most to the goal first [3].
++2. Within a group, the hardest pattern first.
++3. Core and timed work last, unless they are the point of the workout.
++
++## Sources
++
++| # | reference |
++|---|---|
++| 1 | Schoenfeld BJ, Ogborn D, Krieger JW. Dose-response relationship between weekly resistance training volume and increases in muscle mass. *J Sports Sci* 2017;35(11):1073-1082. |
++| 2 | Schoenfeld BJ, Grgic J, Krieger J. How many times per week should a muscle be trained to maximize muscle hypertrophy? *J Sports Sci* 2019;37(11):1286-1295. |
++| 3 | American College of Sports Medicine. Progression models in resistance training for healthy adults. *Med Sci Sports Exerc* 2009;41(3):687-708. |
++| 4 | Schoenfeld BJ, Grgic J, Ogborn D, Krieger JW. Strength and hypertrophy adaptations between low- vs. high-load resistance training. *J Strength Cond Res* 2017;31(12):3508-3523. |
++| 5 | Schoenfeld BJ et al. Longer interset rest periods enhance muscle strength and hypertrophy in resistance-trained men. *J Strength Cond Res* 2016;30(7):1805-1812. |
++| 6 | Grgic J, Lazinica B, Mikulic P, Krieger JW, Schoenfeld BJ. The effects of short versus long inter-set rest intervals in resistance training on measures of muscle hypertrophy. *Eur J Sport Sci* 2017;17(8):983-993. |
++| 7 | Muñoz-Martínez FA et al. Effectiveness of resistance circuit-based training for maximum oxygen uptake and upper-body one-repetition maximum improvements. *Sports Med* 2017;47(10):2031-2043. |
++| 8 | Weakley JJS et al. The effects of traditional, superset, and tri-set resistance training structures on perceived intensity and physiological responses. *Eur J Appl Physiol* 2017;117(9):1877-1889. |
+--- a/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
++++ b/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
+@@ -30,4 +30,6 @@
+ 
+ ## Comments
+ 
++2026-10-17: [docs/methodology.md](../../../methodology.md) drafted for the user to edit; every number in it is a placeholder and the sources are unchecked. Not wired into the brief yet. Wired in, it must stay criteria the model weighs (`evals/planner/charter.md`: structure, rest and rounds are free).
++
+ Issue 03 puts a floor under the clock. It does not fix this: given a floor and no methodology, filling the time by adding a tenth exercise to a circuit is still the cheapest move available.
