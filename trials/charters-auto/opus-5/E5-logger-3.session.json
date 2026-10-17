@@ -1,0 +1,13 @@
+{
+  "case": "E5",
+  "seam": "logger",
+  "model": "claude-opus-5",
+  "exit_code": 0,
+  "wrote_charter": true,
+  "is_error": false,
+  "subtype": "success",
+  "num_turns": 21,
+  "duration_ms": 164797,
+  "total_cost_usd": 1.1748175,
+  "session_id": "695a0f8d-04cd-4bca-a425-3a9df61dbf4c"
+}
