@@ -1,0 +1,129 @@
+--- /dev/null
++++ b/docs/methodology.md
+@@ -0,0 +1,117 @@
++# What a workout is
++
++Status: **draft** for the user to edit. A human writes the methodology (TRAINER.md § The supervisor); every line below is a proposal until they keep it.
++
++The planner reads this as guidance. It is judgement, not legality: none of it becomes a validator rule (ADR-0001), and whatever is checked is checked at a declared bar (ADR-0010), never at 100%.
++
++**The goal it assumes** is TRAINER.md's 8-week criterion: loads on the main patterns go up, and the user keeps training. Onboarding (session 13) will pick a primary goal; until then this is general strength and muscle.
++
++## 1. A working set
++
++A working set is one round of one exercise, as CONTEXT.md counts it.
++
++| | rule |
++|---|---|
++| effort | it ends 0-3 reps short of failure [3, 4] |
++| reps, compound | 6-12 |
++| reps, isolation | 10-20 |
++| reps, body weight or bands | up to 25-30, as long as it ends near failure [5]; past 30, the harder variant (`regression_of` graph) |
++| timed work | 20-60 s |
++| warm-up | not a working set, and not written in the plan |
++
++## 2. How much each group gets
++
++| | rule |
++|---|---|
++| per muscle, per workout | 6-10 working sets on the muscles the slot is for |
++| per muscle, per cycle | at least 10 working sets across the cycle [1] |
++| exercises per muscle group | 1-2 in a workout of 45 min or less; 3 only above 60 |
++| depth before breadth | a second exercise for a muscle only once the first has 3 working sets |
++| variants | at most one exercise per movement pattern per muscle group; never two variants of the same exercise (`variant_of`) in one workout |
++
++Four push-up variants for chest breaks the last line three times.
++
++## 3. Rest by intent
++
++TRAINER.md's bands with the intent attached; isolation widened from 60 s to 60-90 s.
++
++| intent | reps | rest |
++|---|---|---|
++| strength, compound | ≤ 6 | 2.5-3 min [2] |
++| muscle, compound | 7-12 | 90-120 s [2, 6] |
++| isolation | 10-20 | 60-90 s |
++| timed core | 20-60 s | 30-60 s |
++
++In a superset or a circuit the rest is the band of the most demanding exercise in it, taken after the round.
++
++## 4. Which structure, and when
++
++| structure | the right answer when | never |
++|---|---|---|
++| **straight sets** | the first compound of each group: the lift whose load is meant to go up | — |
++| **superset** | the two exercises do not compete: antagonists (push and pull, biceps and triceps), upper and lower, or a lift and a core exercise [7, 8] | two exercises for the same muscle |
++| **circuit** | a finisher, or an adaptation of 20 minutes or less; 3-4 exercises, each on a different muscle | more than 4 exercises; two on the same muscle; as the main work of the workout |
++
++**A circuit is not a way to fit the clock.** It is cheap because it pays one rest for several exercises, which is exactly why each exercise in it gets less recovery and less load. Five triceps exercises as one circuit is fifteen working sets of tired triceps, not fifteen working sets.
++
++## 5. Order
++
++1. The straight-sets compound of each group, largest first.
++2. Secondary compounds, supersetted where section 4 allows.
++3. Isolation.
++4. Core last: it braces everything before it.
++
++## 6. Filling the time
++
++The plan is built to the declared time (issue 11.3). When there is time left, in this order:
++
++1. a round on an existing block, up to the per-workout ceiling in section 2;
++2. a straight-sets block split out of a superset or circuit, so its exercises rest properly;
++3. a new exercise, for a muscle of the slot that has the fewest working sets;
++4. never a variant of an exercise already in the plan.
++
++When there is too little time (an adaptation), the reverse: drop isolation first, then superset antagonists, and keep the straight-sets compound of each group.
++
++## 7. Across the mesocycle
++
++- When a muscle group appears in two slots of the cycle, the two slots train it with different exercises (another angle, another pattern), not the same list twice.
++- The count in section 2 is per cycle, so a group trained twice can take the lower end of the per-workout range.
++
++## Worked example
++
++The request from issue 11.2, chest and arms in 45 minutes with body weight and bands. Work is `reps × 3 s`, as `duration.py` costs it; setup comes on top.
++
++| block | exercises | rounds × reps | rest | time |
++|---|---|---|---|---|
++| A, straight sets | horizontal push (push-up, or its harder variant) | 5 × 10 | 90 s | 10:00 |
++| B, straight sets | a second chest exercise, another angle or a band fly | 4 × 12 | 90 s | 8:24 |
++| C, superset | biceps (band curl) + triceps (band pushdown or dip) | 4 × (12 + 12) | 90 s | 10:48 |
++| D, superset | a second biceps + a second triceps exercise | 3 × (15 + 15) | 60 s | 7:30 |
++| | | | | **36:42** + setup |
++
++Chest 9 working sets, biceps 7, triceps 7, six exercises. If setup leaves it under 40 minutes, section 6 adds a round to C before it adds a seventh exercise.
++
++## Not here
++
++- **Progression**: how loads and reps rise across cycles. After 1.0 (ROADMAP), with the ramp-in.
++- **Drop sets, rest-pause, EMOM, AMRAP**: a block cannot express them (ADR-0002).
++
++## Sources
++
++To be checked by the user before this leaves draft: they are cited from memory, and a wrong citation is worse than none.
++
++1. Schoenfeld, Ogborn, Krieger (2017). Dose-response relationship between weekly resistance training volume and increases in muscle mass. *J Sports Sci* 35(11).
++2. Schoenfeld et al. (2016). Longer interset rest periods enhance muscle strength and hypertrophy in resistance-trained men. *J Strength Cond Res* 30(7).
++3. Helms et al. (2016). Application of the repetitions in reserve-based rating of perceived exertion scale for resistance training. *Strength Cond J* 38(4).
++4. Refalo et al. (2023). Influence of resistance training proximity-to-failure on skeletal muscle hypertrophy: a systematic review with meta-analysis. *Sports Med* 53.
++5. Schoenfeld, Grgic, Van Every, Plotkin (2021). Loading recommendations for muscle strength, hypertrophy, and local endurance: a re-examination of the repetition continuum. *Sports* 9(2).
++6. Grgic et al. (2017). The effects of short versus long inter-set rest intervals in resistance training on measures of muscle hypertrophy: a systematic review. *Eur J Sport Sci* 17(8).
++7. Weakley et al. (2017). The effects of traditional, superset, and tri-set resistance training structures on perceived intensity and physiological responses. *Eur J Appl Physiol* 117(9).
++8. Iversen et al. (2021). No time to lift? Designing time-efficient training programs for strength and hypertrophy: a narrative review. *Sports Med* 51(10).
++
++## Open, for the user
++
++- **The numbers in section 2.** 6-10 sets per muscle per workout is the literature's middle, not how you train.
++- **Circuits.** Do you want them at all outside a short adaptation?
++- **Body weight past 30 reps.** Harder variant, or a slower tempo? The plan has no tempo field.
++- **Where this lives in the prompt.** Whole into `PLANNING` and `MESOCYCLE_PLANNING`, or a tool the planner reads. That is the ticket's build, once this is settled.
+--- a/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
++++ b/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
+@@ -30,4 +30,6 @@
+ 
+ ## Comments
+ 
++**2026-10-17**: a draft of the methodology is at `docs/methodology.md`, for the user to edit. Its sources are cited from memory and unverified, and its *Open* section lists the four decisions still needed. The ticket stays `needs-info` until the user signs it off.
++
+ Issue 03 puts a floor under the clock. It does not fix this: given a floor and no methodology, filling the time by adding a tenth exercise to a circuit is still the cheapest move available.
