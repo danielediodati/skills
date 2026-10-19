@@ -1,0 +1,1523 @@
+--- a/CONTEXT.md
++++ b/CONTEXT.md
+@@ -121,7 +121,7 @@
+ **Negotiation**: one ask and everything it takes to answer it. It holds the runs, accepts at most one plan, and is what the user experiences as *asking for a mesocycle*, a change to it, or an adaptation. The machine opens one when a mesocycle's last cycle ends. What a refusal leaves behind belongs to it, never to the run that was refused.
+ _Avoid_: request, which is what a single run is given.
+ 
+-**Ending**: how a run finished, written when it happens — accepted, turned down, refused to the end, done, fallen over, or stopped. *Done* is a run with nothing to accept or turn down, which is what reading a report is. *Stopped* is a run the user replaced mid-plan with a correction or a new ask; the run that replaces it follows it in the same negotiation. A run that is waiting on an answer has no ending, and neither has one that was cut.
++**Ending**: how a run finished, written when it happens — accepted, turned down, refused to the end, done, fallen over, stopped, or overtaken. *Done* is a run with nothing to accept or turn down, which is what reading a report is. *Stopped* is a run replaced by a correction or a new ask, mid-plan or while its proposal was open; the run that replaces it follows it in the same negotiation. *Overtaken* is an adaptation whose day was reported before it was answered; nothing follows it. A run that is waiting on an answer has no ending, and neither has one that was cut.
+ 
+ **Run record**: a closed run as a document: what it called, what was refused, what it cost. It is the only thing a run leaves behind.
+ 
+--- a/README.md
++++ b/README.md
+@@ -51,11 +51,12 @@
+ | that report ends the mesocycle's last cycle | the supervisor writes the next one's direction, the planner plans from it, and it arrives with that direction in a line |
+ | *«anzi, ho solo 30 minuti»* while a plan is being written | the plan in flight is stopped and the new ask planned instead; a question is answered at once and the plan goes on; a report waits for it |
+ | *«oggi ho 30 minuti»*, *«niente squat»* | this workout adapted, or the mesocycle rewritten; when the words do not say which, it asks *«solo oggi o d'ora in poi?»* |
++| *«ok»*, *«no»*, *«ho 20 minuti»* while a plan is open | accepted or turned down as its buttons do, or the open plan closed for the new ask; reporting the adapted workout closes it too, and a question leaves it open |
+ | *«ho comprato un bilanciere»* | the interview reruns on that alone, a new dated version of your declarations is kept beside the old, and the running mesocycle is kept, rewritten or replaced |
+ | *«la cyclette mi annoia»* | a conclusion kept with your sentence beside it, refused unless you wrote that sentence; every plan after it reads it as a preference |
+ | *«quanto petto ho fatto?»* | answered from the engine's read tools |
+ 
+-A plan arrives with buttons: keep or turn down a mesocycle, three for an adapted workout. The validator refuses any plan outside what you declared, and the planner tries again. Nothing the chat says is a fixed line except the two about the machine being in trouble.
++A plan arrives with two buttons, *Va bene* and *Non mi va*; a closed plan's buttons do nothing, and the chat says why. The validator refuses any plan outside what you declared, and the planner tries again. Nothing the chat says is a fixed line except the two about the machine being in trouble.
+ 
+ ## How it works
+ 
+@@ -156,7 +157,7 @@
+ | `eval-runs/` | `TRAINER_EVAL_RUNS` | each eval run's record |
+ | `trainer.log` | — | every state and exception, never the token or the owner id; rotated at a megabyte, four files deep |
+ 
+-**Every run can be read back.** A *run* is one proposal pursued, to your answer; one ask and all its runs are a *negotiation* (ADR-0007). `trainer runs list` says what each came to: accepted, turned down, refused by the validator, fallen over, cut, stopped by a message mid-plan, waiting, or *opened by the machine* for a next mesocycle. `trainer runs show` prints the tools called, the attempts refused, tokens, seconds per node and dollars charged. It reads documents only, so it works when the provider is what is wrong.
++**Every run can be read back.** A *run* is one proposal pursued, to your answer; one ask and all its runs are a *negotiation* (ADR-0007). `trainer runs list` says what each came to: accepted, turned down, refused by the validator, fallen over, cut, stopped by a new ask mid-plan or over an open plan, overtaken by a report of the day it adapted, waiting, or *opened by the machine* for a next mesocycle. `trainer runs show` prints the tools called, the attempts refused, tokens, seconds per node and dollars charged. It reads documents only, so it works when the provider is what is wrong.
+ 
+ ## Development
+ 
+--- a/docs/adapting/eval-set.toml
++++ b/docs/adapting/eval-set.toml
+@@ -6,7 +6,11 @@
+ # - `goes` is where the message must go: a handoff the entrance offers, or
+ #   - `ask`: nothing started, and the answer asks which they mean;
+ #   - `triage`: nothing started, and the answer asks about the ache;
+-#   - `remember`: a conclusion kept, and nothing started.
++#   - `remember`: a conclusion kept, and nothing started;
++#   - `answer`: nothing started, whatever the answer says.
++# - `open` is the kind of plan open in the chat when the message arrives:
++#   `adaptation`, `change` or `mesocycle`. Only then are `accept_plan` and
++#   `turn_down_plan` offered.
+ # - `excluded` is written into the fixture for that case only, re-tested six
+ #   weeks after the run.
+ # - A case that goes to `adapt_this_workout` is planned, and code holds its plan:
+@@ -187,3 +191,67 @@
+ name = "hate-bench"
+ says = "odio la panca"
+ goes = "remember"
++
++# -- a plan open in the chat --------------------------------------------------
++
++[[cases]]
++name = "open-ok"
++says = "ok"
++open = "adaptation"
++goes = "accept_plan"
++
++[[cases]]
++name = "open-perfect"
++says = "perfetto"
++open = "adaptation"
++goes = "accept_plan"
++
++[[cases]]
++name = "open-daje"
++says = "daje"
++open = "mesocycle"
++goes = "accept_plan"
++
++[[cases]]
++name = "open-no"
++says = "no"
++open = "adaptation"
++goes = "turn_down_plan"
++
++[[cases]]
++name = "open-dislike"
++says = "non mi piace"
++open = "mesocycle"
++goes = "turn_down_plan"
++
++[[cases]]
++name = "open-no-bench"
++says = "senza panca"
++open = "adaptation"
++goes = "adapt_this_workout"
++without_named = ["Bench"]
++
++[[cases]]
++name = "open-twenty"
++says = "ho 20 minuti"
++open = "adaptation"
++goes = "adapt_this_workout"
++minutes = 20
++
++[[cases]]
++name = "open-twenty-mesocycle"
++says = "ho 20 minuti"
++open = "mesocycle"
++goes = "turn_down_plan"
++
++[[cases]]
++name = "open-report"
++says = "fatto! squat 5 da 8 a 80 kg, il resto come scritto"
++open = "adaptation"
++goes = "log_workout"
++
++[[cases]]
++name = "open-question"
++says = "quanto recupero tra le serie?"
++open = "adaptation"
++goes = "answer"
+--- a/docs/adr/0005-a-plan-becomes-a-workout-when-it-is-accepted.md
++++ b/docs/adr/0005-a-plan-becomes-a-workout-when-it-is-accepted.md
+@@ -28,3 +28,7 @@
+ ## Amended in session 9
+ 
+ **What is accepted is a mesocycle** (ADR-0008). Accepting it prescribes nothing: each of its workouts is prescribed when it is served as today's, which keeps this ADR's reason intact — no outstanding prescription for a workout that has not come yet.
++
++## Amended in session 15c
++
++**The bot also resumes on a written answer.** While a plan is open, the entrance reads *«ok»* or *«no»* against it and the bot resumes through the same `Negotiation.answer` a tap does. A plan has two buttons, *Va bene* and *Non mi va*; a shorter one is asked for in words.
+--- a/docs/adr/0006-the-entrance-is-a-conversation-not-a-classifier.md
++++ b/docs/adr/0006-the-entrance-is-a-conversation-not-a-classifier.md
+@@ -41,3 +41,7 @@
+ ## Amended in session 15b
+ 
+ **The entrance runs on OpenRouter only** (ADR-0015). `ENTRANCE_BACKEND` and the `llama3.1` default are gone; `ENTRANCE_MODEL` still gives it a model of its own.
++
++## Amended in session 15c
++
++**A message while a plan is open is read against it.** The prompt names the kind of plan open (adaptation, change, mesocycle), and two handoffs are offered only then: `accept_plan` and `turn_down_plan`, the second passing the user's words verbatim. A new ask goes to its own handoff and closes the open plan; a report or a question is handled as always. Which of these a message is stays the model's judgement, measured in the adaptation set.
+--- a/docs/adr/0007-a-run-is-one-proposal-pursued.md
++++ b/docs/adr/0007-a-run-is-one-proposal-pursued.md
+@@ -37,6 +37,15 @@
+ written the moment it happens, it leaves a document in the archive, and where
+ the reader found it stays the reader's to derive.
+ 
++## Amended in session 15c
++
++**A proposal never ends unanswered without an ending.**
++
++- A new ask over an open proposal ends it `stopped`, the ending a stop mid-plan already writes: the user replaced it, and the new run follows it in the same negotiation.
++- An open adaptation whose day is reported ends `overtaken`, the seventh ending: the engine would refuse to prescribe it (`mesocycles.still_today`), and nothing follows it.
++- Either is written by resuming the proposal with `planner.unanswered(ending)`, so the graph writes it like any other.
++- A run the entrance carries into a subgraph is on both their threads; the reader counts it once, as the subgraph's.
++
+ ## Consequences
+ 
+ - **`record.Run` goes.** The model, provider and budget carried in the run's config were the identity of a run answered by one model; the model belongs to the node that did the work and goes in the record's node entries.
+--- a/docs/work/15c-portfolio-ready/issues/01-a-plan-is-answered-in-words-too.md
++++ b/docs/work/15c-portfolio-ready/issues/01-a-plan-is-answered-in-words-too.md
+@@ -32,7 +32,7 @@
+ 
+ ## Acceptance criteria
+ 
+-- [ ] On scripted models: each row of the table, with the run records it leaves.
+-- [ ] Reporting the workout an open adaptation adapts ends the adaptation; a tap on it afterwards changes nothing.
+-- [ ] No run in the archive reads `cut` after a new ask over an open proposal.
++- [x] On scripted models: each row of the table, with the run records it leaves.
++- [x] Reporting the workout an open adaptation adapts ends the adaptation; a tap on it afterwards changes nothing.
++- [x] No run in the archive reads `cut` after a new ask over an open proposal.
+ - [ ] The adaptation set (`docs/adapting/eval-set.toml`) gains rows for written answers to an open proposal, and `trainer eval --suite adapt` passes its bars: a paid pass, estimated and approved first.
+--- a/src/trainer/adapt_evaluation.py
++++ b/src/trainer/adapt_evaluation.py
+@@ -208,7 +208,13 @@
+ ) -> tuple[eval_runner.Talked, Mapping[str, Any]]:
+     """One message through the entrance, reading today's workout and checking requests off the fixture."""
+     store = InMemoryStore()
+-    graph = entrance.build(on, budget=budget, checkpointer=eval_runner.checkpointer(), store=store)
++    graph = entrance.build(
++        on,
++        budget=budget,
++        checkpointer=eval_runner.checkpointer(),
++        store=store,
++        proposing=lambda thread: case.open or None,
++    )
+ 
+     def heard() -> dict[str, Any]:
+         final = dict(graph.invoke(entrance.heard(case.says), eval_runner.thread("adapt", remembers=True)))
+@@ -233,6 +239,8 @@
+         wrong = handoff != case.goes
+     elif case.goes in adapt_set.ASKING:
+         wrong = bool(handoff) or "?" not in answer
++    elif case.goes == adapt_set.ANSWER:
++        wrong = bool(handoff)
+     else:
+         wrong = bool(handoff) or not final.get("kept")
+         went = f"{went}, {len(final.get('kept', ()))} kept"
+--- a/src/trainer/adapt_set.py
++++ b/src/trainer/adapt_set.py
+@@ -16,9 +16,15 @@
+ ADAPT_SET_ENV_VAR = "TRAINER_ADAPT_SET"
+ DEFAULT_PARTS = ("docs", "adapting", "eval-set.toml")
+ 
+-ASK, TRIAGE, REMEMBER = "ask", "triage", "remember"
+-HANDED = (entrance.ADAPT_THIS_WORKOUT, entrance.CHANGE_MESOCYCLE, entrance.CHANGE_DECLARATION)
+-DESTINATIONS = (*HANDED, ASK, TRIAGE, REMEMBER)
++ASK, TRIAGE, REMEMBER, ANSWER = "ask", "triage", "remember", "answer"
++HANDED = (
++    entrance.ADAPT_THIS_WORKOUT,
++    entrance.CHANGE_MESOCYCLE,
++    entrance.CHANGE_DECLARATION,
++    entrance.LOG_WORKOUT,
++    *entrance.ANSWERS,
++)
++DESTINATIONS = (*HANDED, ASK, TRIAGE, REMEMBER, ANSWER)
+ ASKING = (ASK, TRIAGE)
+ """Where nothing may start and the answer is a question."""
+ 
+@@ -44,6 +50,8 @@
+     untrained: tuple[str, ...] = ()
+     longer: bool = False
+     told: bool = False
++    open: str = ""
++    """The kind of plan open in the chat when the message arrives, one of `entrance.OPEN`; empty for none."""
+ 
+     @property
+     def planned(self) -> bool:
+@@ -113,6 +121,11 @@
+         raise AdaptSetError(f"{name}: goes {goes!r} is not one of {', '.join(DESTINATIONS)}")
+     if goes != entrance.ADAPT_THIS_WORKOUT and any(key in entry for key in PLAN_KEYS):
+         raise AdaptSetError(f"{name}: only an adaptation is planned, so only one says what its plan holds")
++    opened = str(entry.get("open", ""))
++    if opened and opened not in entrance.OPEN:
++        raise AdaptSetError(f"{name}: open {opened!r} is not one of {', '.join(entrance.OPEN)}")
++    if goes in entrance.ANSWERS and not opened:
++        raise AdaptSetError(f"{name}: goes {goes} answers a plan, so one has to be open")
+ 
+     def listed(key: str) -> tuple[str, ...]:
+         return tuple(str(one) for one in entry.get(key, ()))
+@@ -134,4 +147,5 @@
+         untrained=listed("untrained"),
+         longer=bool(entry.get("longer", False)),
+         told=bool(entry.get("told", False)),
++        open=opened,
+     )
+--- a/src/trainer/coach/bot.py
++++ b/src/trainer/coach/bot.py
+@@ -227,22 +227,17 @@
+ 
+ KEPT = "ok"
+ TURNED_DOWN = "no"
+-SHORTER = "30"
++RETIRED = "30"
++"""What *Solo 30 minuti* carried, still under plans offered before it went."""
+ 
+ CONFIRMED = "y"
+ DECLINED = "n"
+-
+-SHORTER_MINUTES = 30
+ 
+ BUTTONS = (
+     (KEPT, "Va bene"),
+     (TURNED_DOWN, "Non mi va"),
+-    (SHORTER, f"Solo {SHORTER_MINUTES} minuti"),
+ )
+-"""The three answers a proposed plan takes, as (action, label)."""
+-
+-MESOCYCLE_BUTTONS = BUTTONS[:2]
+-"""A mesocycle is kept or turned down; a shorter one is an adaptation of a day, not of it."""
++"""The two answers a proposed plan takes, as (action, label); anything else is written."""
+ 
+ CONFIRM = ((CONFIRMED, "Sì"), (DECLINED, "No"))
+ """The two answers the exclusion the logger proposes takes.
+@@ -252,13 +247,10 @@
+ buttons that shape.
+ """
+ 
+-ACTIONS = dict(BUTTONS) | dict(CONFIRM)
++ACTIONS = dict(BUTTONS) | dict(CONFIRM) | {RETIRED: ""}
+ """Every action a callback may carry, so one tap is recognised and no other is."""
+ 
+-SAID = {
+-    TURNED_DOWN: "Non mi va questo allenamento.",
+-    SHORTER: f"Ho solo {SHORTER_MINUTES} minuti.",
+-}
++SAID = {TURNED_DOWN: "Non mi va questo allenamento."}
+ """What a tap means in words, because the planner is told why and not which button."""
+ 
+ EXCLUSION_ASKED = (
+@@ -675,6 +667,8 @@
+         await _onboarding(graphs, thread, text, final, chat)
+     elif handoff == entrance.CHANGE_DECLARATION:
+         await _changing(graphs, thread, text, final, chat)
++    elif handoff in entrance.ANSWERS:
++        await _written_answer(graphs, thread, text, handoff, chat)
+ 
+ 
+ def interjecting(graphs: Graphs) -> Interject:
+@@ -814,9 +808,9 @@
+ ) -> None:
+     """The planner, asked for a mesocycle, a change or an adaptation, behind the turn the entrance has already answered.
+ 
+-    A request opened here supersedes any plan the thread was still waiting on,
+-    and a tap on that one is answered as superseded. `following` opens it in
+-    the negotiation of the run it replaced, as the run after it.
++    A request opened here ends any plan the thread was still waiting on as
++    stopped, and follows it in its negotiation, as `following` does for a run
++    stopped mid-plan; a tap on that plan is answered as superseded.
+ 
+     Assembling the request is a synchronous read of SQLite and of the
+     declaration, and it is the half that can be refused -- so it happens
+@@ -836,10 +830,9 @@
+         await chat.say(BLOCKED)
+         return
+     carrying = entrance.carried(final)
+-    if following:
+-        carrying |= await asyncio.to_thread(
+-            graphs.negotiation.continuing, _reading(under(thread, PLANNING))
+-        )
++    on = _reading(under(thread, PLANNING))
++    if following or await asyncio.to_thread(graphs.negotiation.pending, on) is not None:
++        carrying |= await asyncio.to_thread(graphs.negotiation.continuing, on)
+     await _proposing(graphs, thread, request, chat, carrying)
+ 
+ 
+@@ -1222,23 +1215,47 @@
+         if tap.action in dict(CONFIRM):
+             await _confirming(graphs, thread, tap, chat)
+             return
+-        on = _reading(under(thread, PLANNING))
+-        held = await asyncio.to_thread(graphs.negotiation.pending, on)
+-        if held is None or held.id != tap.proposal:
+-            # Checked before the draft opens, so a stale tap draws no
+-            # *Ci penso* for a plan nobody is working on.
+-            await told(graphs, negotiations.Superseded(), thread, chat)
++        if tap.action == RETIRED:
++            await _relay(graphs, thread, entrance.RETIRED, chat)
+             return
+-        # Streamed like any other run: a refusal plans the whole workout
+-        # again, which is the same minutes of silence a question costs.
+-        settled = await _streaming(
+-            lambda posted: graphs.negotiation.answer(on, tap.proposal, _answer(tap), posted),
+-            chat,
+-            progress.Progress(progress.PLAN),
+-        )
+-        await told(graphs, settled, thread, chat)
++        await _answered(graphs, thread, tap.proposal, _answer(tap), chat)
+ 
+     return resume
++
++
++async def _answered(
++    graphs: Graphs, thread: str, proposal: str, answer: planner.Answer, chat: Chat
++) -> None:
++    """The proposal answered, by a tap or in words, and what it leaves the chat holding."""
++    on = _reading(under(thread, PLANNING))
++    gone = await asyncio.to_thread(graphs.negotiation.gone, on, proposal)
++    if gone is not None:
++        # Checked before the draft opens, so a stale answer draws no
++        # *Ci penso* for a plan nobody is working on.
++        await told(graphs, gone, thread, chat)
++        return
++    # Streamed like any other run: a refusal plans the whole workout
++    # again, which is the same minutes of silence a question costs.
++    settled = await _streaming(
++        lambda posted: graphs.negotiation.answer(on, proposal, answer, posted),
++        chat,
++        progress.Progress(progress.PLAN),
++    )
++    await told(graphs, settled, thread, chat)
++
++
++async def _written_answer(
++    graphs: Graphs, thread: str, text: str, handoff: str, chat: Chat
++) -> None:
++    """The plan open in the chat answered in words: kept, or turned down with what they wrote."""
++    held = await asyncio.to_thread(
++        graphs.negotiation.pending, _reading(under(thread, PLANNING))
++    )
++    if held is None:
++        await told(graphs, negotiations.Superseded(), thread, chat)
++        return
++    answer = planner.accepted() if handoff == entrance.ACCEPT_PLAN else planner.refused(text)
++    await _answered(graphs, thread, held.id, answer, chat)
+ 
+ 
+ async def _confirming(graphs: Graphs, thread: str, tap: Tap, chat: Chat) -> None:
+@@ -1289,8 +1306,6 @@
+     """
+     if tap.action == KEPT:
+         return planner.accepted()
+-    if tap.action == SHORTER:
+-        return planner.refused(SAID[SHORTER], minutes=SHORTER_MINUTES)
+     return planner.refused(SAID[TURNED_DOWN])
+ 
+ 
+@@ -1311,19 +1326,19 @@
+             if isinstance(proposed, plans.Mesocycle):
+                 assert isinstance(request, plans.MesocycleRequest)
+                 text = mesocycle_proposal(proposed, request)
+-                buttons: Sequence[tuple[str, str]] = MESOCYCLE_BUTTONS
+             else:
+                 assert isinstance(request, plans.Request)
+                 text = proposal(proposed, request.budget_min)
+-                buttons = BUTTONS
+             await chat.offer(
+                 text,
+-                [(carried(Tap(action, thread, answerable)), label) for action, label in buttons],
++                [(carried(Tap(action, thread, answerable)), label) for action, label in BUTTONS],
+             )
+         case negotiations.Accepted(workout=written) if written is not None:
+             await _relay(graphs, thread, entrance.PRESCRIBED, chat)
+         case negotiations.Accepted():
+             await _relay(graphs, thread, entrance.KEPT, chat)
++        case negotiations.Superseded(ending=run_record.OVERTAKEN):
++            await _relay(graphs, thread, entrance.OVERTAKEN, chat)
+         case negotiations.Superseded():
+             # The thread has moved on, or this plan was already answered, and
+             # silence would read as a bot that is down.
+@@ -1354,6 +1369,9 @@
+         await _relay(graphs, thread, entrance.NOT_LOGGED, chat)
+         return
+     await asyncio.to_thread(_written, final)
++    await asyncio.to_thread(
++        graphs.negotiation.overtaken, _reading(under(thread, PLANNING))
++    )
+     await _relay(graphs, thread, entrance.LOGGED, chat)
+     await _preparing(graphs, thread, chat)
+ 
+@@ -1370,6 +1388,21 @@
+         return held is not None and held.unasked
+ 
+     return waiting
++
++
++def proposing(plans_on: planner.Planner) -> Callable[[str], str | None]:
++    """Which kind of plan offered on a chat thread waits on the user's answer, or nothing."""
++    talks = negotiations.Negotiation(plans_on)
++
++    def offered(thread: str) -> str | None:
++        held = talks.pending(_reading(under(thread, PLANNING)))
++        if held is None:
++            return None
++        if isinstance(held.request, plans.MesocycleRequest):
++            return entrance.MESOCYCLE if held.request.changing is None else entrance.CHANGE
++        return entrance.ADAPTATION
++
++    return offered
+ 
+ 
+ _next = negotiations.next_request
+@@ -1802,6 +1835,7 @@
+             prepared=prepared(plans_on, preparing),
+             store=store,
+             planning=planning(preparing, stopping),
++            proposing=proposing(plans_on),
+         ),
+         planner=plans_on,
+         logger=logger_graph.build(
+--- a/src/trainer/coach/entrance.py
++++ b/src/trainer/coach/entrance.py
+@@ -132,6 +132,30 @@
+     raise AssertionError("the graph answers log_workout; nothing calls it")
+ 
+ 
++def accept_plan() -> str:
++    """Accept the plan you offered them and that is still open in the chat.
++
++    Call this when their message says yes to it, as in «ok», «perfetto»,
++    «daje»: the same as their tapping *Va bene*. This takes no arguments.
++
++    The body is never run. The graph answers this call by answering the plan.
++    """
++    raise AssertionError("the graph answers accept_plan; nothing calls it")
++
++
++def turn_down_plan() -> str:
++    """Turn down the plan you offered them and that is still open in the chat.
++
++    Call this when their message says no to it and asks for nothing in
++    particular instead, as in «no», «non mi piace»: the same as their tapping
++    *Non mi va*. What they wrote reaches the planner exactly as they typed it,
++    so this takes no arguments, and another plan follows.
++
++    The body is never run. The graph answers this call by answering the plan.
++    """
++    raise AssertionError("the graph answers turn_down_plan; nothing calls it")
++
++
+ def set_up() -> str:
+     """Start the interview that sets up their training: their goal, their rotation, their time, their equipment.
+ 
+@@ -152,6 +176,8 @@
+ CHANGE_DECLARATION = change_declaration.__name__
+ LOG_WORKOUT = log_workout.__name__
+ SET_UP = set_up.__name__
++ACCEPT_PLAN = accept_plan.__name__
++TURN_DOWN_PLAN = turn_down_plan.__name__
+ 
+ HANDOFFS = (
+     todays_workout,
+@@ -161,8 +187,13 @@
+     change_declaration,
+     log_workout,
+     set_up,
++    accept_plan,
++    turn_down_plan,
+ )
+ """What the entrance hands on, on the same surface as the reads (ADR-0006, item 2)."""
++
++ANSWERS = (ACCEPT_PLAN, TURN_DOWN_PLAN)
++"""The handoffs that answer the plan open in the chat, offered only while one is."""
+ 
+ CARRIED = (PLAN_MESOCYCLE, ADAPT_THIS_WORKOUT, CHANGE_MESOCYCLE, CHANGE_DECLARATION, LOG_WORKOUT, SET_UP)
+ """The handoffs a subgraph carries on; the run of any other ends with the entrance's turn."""
+@@ -190,8 +221,8 @@
+ WAITING_MESOCYCLE = (
+     "Their mesocycle has run all its cycles, and the next one was prepared "
+     "without them asking: it is in the chat, or arriving shortly. Tell them "
+-    "so, and that they accept it or turn it down there. Do not offer to plan "
+-    "another."
++    "so, and that they accept it or turn it down there, with its buttons or "
++    "by writing to you. Do not offer to plan another."
+ )
+ 
+ PREPARED = "prepared"
+@@ -237,6 +268,15 @@
+         "The interview that updates what they declared has started, and what it "
+         "says follows your message. Tell them you are updating it. Ask nothing "
+         "yourself."
++    ),
++    ACCEPT_PLAN: (
++        "Their yes has gone to the plan, and what comes of it follows your "
++        "message. Tell them, in a few words, that you have it."
++    ),
++    TURN_DOWN_PLAN: (
++        "The plan is turned down with their words, and the planner has started "
++        "on another. Tell them it will arrive shortly. You have not seen it, so "
++        "say nothing about what is in it."
+     ),
+ }
+ """What a handoff call is answered with: not words for the user, but what the
+@@ -254,6 +294,47 @@
+ 
+ REPLACING = "The plan that was being written is dropped for this one. "
+ """What a planning handoff's answer opens with while a plan is being written."""
++
++OPEN_PLAN = """
++
++Right now {offered} you offered them is open in the chat, waiting on their
++answer, and this message is read against it. If it says yes to the plan, as in
++«ok», «perfetto», «daje», call `accept_plan`. If it says no and asks for
++nothing in particular, as in «no», «non mi piace», call `turn_down_plan`. If
++it asks for something different, as in «senza panca» or «ho 20 minuti», it is
++about the plan in the chat: {differently} If they are reporting training, call
++`log_workout`. Anything else, a question or a remark, answer as always: the
++plan stays open."""
++"""What the prompt adds while a plan offered on the thread waits on the user's answer."""
++
++ADAPTATION, CHANGE, MESOCYCLE = "adaptation", "change", "mesocycle"
++"""The kinds of plan that can be open in the chat."""
++
++OPEN = {
++    ADAPTATION: (
++        "this workout, adapted,",
++        "call `adapt_this_workout` with the ask as it now stands, whole, and "
++        "the open plan is closed for it.",
++    ),
++    CHANGE: (
++        "their mesocycle, rewritten,",
++        "call `change_mesocycle` with the change as it now stands, whole, and "
++        "the open plan is closed for it.",
++    ),
++    MESOCYCLE: (
++        "a mesocycle",
++        "call `turn_down_plan`, and their words go to the planner with it.",
++    ),
++}
++"""What the open plan is, and where a different ask over it goes, per kind."""
++
++CLOSING = "The plan open in the chat is closed for this one. "
++"""What a planning handoff's answer opens with while a plan is open."""
++
++NOTHING_OPEN = (
++    "There is no plan open to answer: it has been answered or closed. Say so, "
++    "and ask what they would like."
++)
+ 
+ AFTER_THE_PLAN = (
+     "That waits for the plan being written, and is done as soon as it arrives. "
+@@ -405,6 +486,19 @@
+     "in hand and that writing to you again gets them another."
+ )
+ 
++OVERTAKEN = (
++    "They tapped a button on a workout you adapted for them, but they have "
++    "reported that day's training since, so the adaptation is closed and "
++    "nothing was written. Tell them so, and that asking what to train gets "
++    "them the next workout."
++)
++
++RETIRED = (
++    "They tapped a button that is gone, the one for a shorter workout, so "
++    "nothing was answered and the plan is still open. Tell them to write how "
++    "long they have instead, or to accept or turn the plan down."
++)
++
+ NO_PLAN = (
+     "You could not reach a plan that fits their constraints: every attempt "
+     "was refused by the rules. Tell them so plainly, without blaming "
+@@ -454,6 +548,8 @@
+     PRESCRIBED,
+     KEPT,
+     SUPERSEDED,
++    OVERTAKEN,
++    RETIRED,
+     NO_PLAN,
+     LOGGED,
+     NOT_LOGGED,
+@@ -566,12 +662,14 @@
+     prepared: Callable[[str], bool] | None = None,
+     store: BaseStore | None = None,
+     planning: Callable[[str], bool] | None = None,
++    proposing: Callable[[str], str | None] | None = None,
+ ) -> Entrance:
+     """The compiled entrance graph, talking on `on`; `today` answers `todays_workout`.
+ 
+     `checking` says why a `CHECKED` handoff cannot start, or `None` when it can.
+     `prepared` says whether the next mesocycle is waiting, or being prepared, on a thread.
+     `planning` says whether a plan the user asked for is being written on a thread.
++    `proposing` says which kind of plan, one of `OPEN`, waits on the user's answer on a thread.
+     `store` is where `remember` keeps a conclusion; without one it is not offered.
+ 
+     **Nothing here writes, and nothing here plans.** The reads answer questions
+@@ -589,7 +687,12 @@
+     free = [
+         {"type": "function", "function": tools.schema(tool)}
+         for tool in HANDOFFS
+-        if tool.__name__ not in CHECKED
++        if tool.__name__ not in CHECKED and tool.__name__ not in ANSWERS
++    ]
++    answering_plan = [
++        {"type": "function", "function": tools.schema(tool)}
++        for tool in HANDOFFS
++        if tool.__name__ in ANSWERS
+     ]
+     bounded = [
+         {"type": "function", "function": tools.schema(tool)}
+@@ -600,6 +703,12 @@
+     def on_thread(asks: Callable[[str], bool] | None) -> bool:
+         thread = get_config().get("configurable", {}).get("thread_id")
+         return asks is not None and thread is not None and asks(str(thread))
++
++    def open_plan() -> str | None:
++        thread = get_config().get("configurable", {}).get("thread_id")
++        if proposing is None or thread is None:
++            return None
++        return proposing(str(thread))
+ 
+     def talk(state: EntranceState) -> dict[str, Any]:
+         """One turn of the conversation, with the tools bound only while they are still useful.
+@@ -616,6 +725,7 @@
+             else []
+         )
+         definitions: list[dict[str, Any]] = []
++        offered_plan = None if situation else open_plan()
+         if not situation and not state.get("handoff"):
+             # A turn that has already reached for a subgraph, and a turn opened
+             # to say one thing, both have nothing left to do but speak. Bound
+@@ -624,9 +734,16 @@
+             # A checked handoff can be refused and called again, so it is
+             # bounded like a read; the others always start.
+             within = state.get("spent", 0) < budget
+-            definitions = [*(reads + bounded if within else []), *free]
++            definitions = [
++                *(reads + bounded if within else []),
++                *free,
++                *(answering_plan if offered_plan in OPEN else []),
++            ]
+         bound = model.bind_tools(definitions) if definitions else model
+         prompt = TALKING + (MID_PLAN if not situation and on_thread(planning) else "")
++        if offered_plan in OPEN:
++            offered, differently = OPEN[offered_plan]
++            prompt += OPEN_PLAN.format(offered=offered, differently=differently)
+         reply = bound.invoke([SystemMessage(prompt), *state.get("messages", []), *asked])
+         return born | {"budget": budget, "messages": [*asked, reply]}
+ 
+@@ -689,13 +806,14 @@
+             return on_thread(prepared)
+ 
+         mid_plan = on_thread(planning)
++        offered_plan = open_plan()
+ 
+         def started(name: str) -> str:
+-            if not mid_plan:
+-                return STARTED[name]
+-            if name in WRITES:
+-                return AFTER_THE_PLAN
+-            return REPLACING + STARTED[name]
++            if mid_plan:
++                return AFTER_THE_PLAN if name in WRITES else REPLACING + STARTED[name]
++            if offered_plan in OPEN and name in PLANS:
++                return CLOSING + STARTED[name]
++            return STARTED[name]
+ 
+         for call in reply.tool_calls:
+             name = call["name"]
+@@ -705,6 +823,10 @@
+                 continue
+             if taken:
+                 said = ONE_AT_A_TIME
++            elif name in ANSWERS:
++                said, taken = (
++                    (STARTED[name], name) if offered_plan in OPEN else (NOTHING_OPEN, "")
++                )
+             elif name == TODAYS_WORKOUT:
+                 said, taken = looked_up(), name
+                 if said == NO_MESOCYCLE and waiting():
+--- a/src/trainer/coach/negotiation.py
++++ b/src/trainer/coach/negotiation.py
+@@ -55,6 +55,9 @@
+ @dataclass(frozen=True)
+ class Superseded:
+     """The answer was to a proposal no longer in hand, and nothing was written."""
++
++    ending: str = ""
++    """How the thread's last run ended, when nothing is pending on it: why the proposal is gone."""
+ 
+ 
+ @dataclass(frozen=True)
+@@ -121,7 +124,8 @@
+         progress: Progress | None = None,
+         unasked: bool = False,
+     ) -> Outcome:
+-        """A new ask on this thread, superseding any proposal pending on it."""
++        """A new ask on this thread, the proposal pending on it ended as stopped."""
++        self.end(on, records.STOPPED)
+         given = dict(planner.starting(request, unasked=unasked)) | dict(carrying or {})
+         return self._ran(given, on, progress)
+ 
+@@ -133,10 +137,39 @@
+         progress: Progress | None = None,
+     ) -> Outcome:
+         """The proposal `proposal` kept or turned down; superseded when it is not the one pending."""
++        gone = self.gone(on, proposal)
++        if gone is not None:
++            return gone
++        return self._ran(Command(resume=answer), on, progress)
++
++    def gone(self, on: RunnableConfig, proposal: str) -> Superseded | None:
++        """Why `proposal` can no longer be answered, or nothing when it is the one pending."""
+         held = self.pending(on)
+-        if held is None or held.id != proposal:
++        if held is not None and held.id == proposal:
++            return None
++        if held is not None:
+             return Superseded()
+-        return self._ran(Command(resume=answer), on, progress)
++        return Superseded(str(self._planner.get_state(on).values.get("ending", "")))
++
++    def end(self, on: RunnableConfig, ending: str) -> dict[str, Any] | None:
++        """The proposal pending on this thread closed unanswered as `ending`; its record, or nothing when none was."""
++        if self.pending(on) is None:
++            return None
++        final = self._planner.invoke(Command(resume=planner.unanswered(ending)), on)
++        return records.of(final, self._budget)
++
++    def overtaken(self, on: RunnableConfig) -> dict[str, Any] | None:
++        """The adaptation pending on this thread ended once the day it adapts is no longer today; its record, or nothing."""
++        held = self.pending(on)
++        if held is None or not isinstance(held.request, plans.Request):
++            return None
++        adapting = held.request.adapting
++        if adapting is None:
++            return None
++        with tools.reported(), tools.opened() as connection:
++            if mesocycles.still_today(connection, adapting.mesocycle, adapting.served_after):
++                return None
++        return self.end(on, records.OVERTAKEN)
+ 
+     def pending(self, on: RunnableConfig) -> Proposed | None:
+         """The proposal this thread is waiting on, or nothing."""
+--- a/src/trainer/coach/planner.py
++++ b/src/trainer/coach/planner.py
+@@ -433,11 +433,11 @@
+ 
+ 
+ class Answer(TypedDict, total=False):
+-    """What resumes a thread waiting on a plan: kept, or turned down and why."""
++    """What resumes a thread waiting on a plan: kept, turned down and why, or left unanswered."""
+ 
+     accepted: bool
+     because: str
+-    minutes: int
++    ending: str
+ 
+ 
+ def accepted() -> Answer:
+@@ -445,12 +445,14 @@
+     return {"accepted": True}
+ 
+ 
+-def refused(because: str = "", minutes: int | None = None) -> Answer:
+-    """The plan is turned down, with what the user said and any shorter time they asked for."""
+-    answer: Answer = {"accepted": False, "because": because}
+-    if minutes is not None:
+-        answer["minutes"] = minutes
+-    return answer
++def refused(because: str = "") -> Answer:
++    """The plan is turned down, with what the user said."""
++    return {"accepted": False, "because": because}
++
++
++def unanswered(ending: str) -> Answer:
++    """The plan is closed without an answer, its run ended as `ending`, and nothing follows it."""
++    return {"accepted": False, "ending": ending}
+ 
+ 
+ def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict[str, Any]:
+@@ -874,9 +876,10 @@
+         answer: Answer = interrupt(offered.model_dump())
+         if answer.get("accepted"):
+             return {"accepted": True}
++        if answer.get("ending"):
++            return closed(state, answer["ending"])
+         request = state["request"]
+         because = answer.get("because", "")
+-        shorter = answer.get("minutes")
+         # Turning a plan down ends the run that offered it (ADR-0007, item 2).
+         # What it cost is written here and nowhere else: the state below is
+         # the next run's, and everything this one spent is about to be cleared.
+@@ -901,12 +904,7 @@
+         # one before it, so the messages go and the brief is written again --
+         # this time carrying every plan the negotiation has turned down.
+         again = dataclasses.replace(
+-            request,
+-            refusals=plans.turned_down(request.refusals, offered, because),
+-            budget_min=shorter if shorter is not None else request.budget_min,
+-            # An allocation divides the minutes that were asked for, so a
+-            # shorter workout carries none: `turn` divides the new budget.
+-            allocation=() if shorter is not None else request.allocation,
++            request, refusals=plans.turned_down(request.refusals, offered, because)
+         )
+         # `dict(...)` because a node contributes a plain mapping, while
+         # `following` is typed as the state so it can also be a run's input.
+@@ -1011,7 +1009,9 @@
+             return "done"
+         return "planner"
+ 
+-    def after_propose(state: PlannerState) -> Literal["planner", "prescribe"]:
++    def after_propose(state: PlannerState) -> Literal["planner", "prescribe", "done"]:
++        if state.get("ending"):
++            return "done"
+         return "prescribe" if state.get("accepted") else "planner"
+ 
+     graph = StateGraph(PlannerState)
+@@ -1031,7 +1031,9 @@
+         {"planner": "planner", "propose": "propose", "done": END},
+     )
+     graph.add_conditional_edges(
+-        "propose", after_propose, {"planner": "planner", "prescribe": "prescribe"}
++        "propose",
++        after_propose,
++        {"planner": "planner", "prescribe": "prescribe", "done": END},
+     )
+     graph.add_edge("prescribe", END)
+     return graph.compile(checkpointer=checkpointer)
+--- a/src/trainer/coach/record.py
++++ b/src/trainer/coach/record.py
+@@ -64,9 +64,12 @@
+ """The run raised, and whoever caught it wrote the ending the node could not."""
+ 
+ STOPPED = "stopped"
+-"""The run was stopped between graph steps because the user asked again.
+-
+-These six are every way a run can finish. A run still waiting on an
++"""The run was replaced by a newer ask: stopped between graph steps, or its proposal closed unanswered."""
++
++OVERTAKEN = "overtaken"
++"""The run's adapted workout was reported before its proposal was answered.
++
++These seven are every way a run can finish. A run still waiting on an
+ answer has no ending, and neither has one that was cut: where the reader found
+ it is the reader's to derive (ADR-0007, item 7).
+ """
+--- a/src/trainer/coach/runs.py
++++ b/src/trainer/coach/runs.py
+@@ -172,8 +172,17 @@
+     for run in closed:
+         grouped.setdefault(run.negotiation, []).append(run)
+     standing: dict[str, Live] = {}
+-    for one in unfinished:
+-        standing[one.negotiation or one.thread] = one
++    written = {run.run: run.negotiation for run in closed}
++    seen: set[str] = set()
++    for one in sorted(unfinished, key=lambda run: instant(run.moved), reverse=True):
++        # A run the entrance carries into a subgraph is on both their threads,
++        # the subgraph's moved last, and the subgraph may have written it under
++        # the negotiation it followed into.
++        if one.run in seen or written.get(one.run, one.negotiation) != one.negotiation:
++            continue
++        if one.run:
++            seen.add(one.run)
++        standing.setdefault(one.negotiation or one.thread, one)
+     held = [
+         Negotiation(named, tuple(runs), standing.pop(named, None))
+         for named, runs in grouped.items()
+--- a/src/trainer/engine/mesocycles.py
++++ b/src/trainer/engine/mesocycles.py
+@@ -481,6 +481,15 @@
+     return found, workout_id
+ 
+ 
++def still_today(connection: sqlite3.Connection, mesocycle: int, served_after: int) -> bool:
++    """Whether the day an adaptation was asked for is still today's: nothing reported, nothing accepted since."""
++    try:
++        found = today(connection)
++    except MesocycleError:
++        return False
++    return (found.mesocycle, found.performed) == (mesocycle, served_after)
++
++
+ def record_adapted(
+     connection: sqlite3.Connection,
+     blocks: Sequence[workouts.PrescribedBlock],
+--- a/tests/test_adapt_evaluation.py
++++ b/tests/test_adapt_evaluation.py
+@@ -228,6 +228,33 @@
+     assert failed(wrong, "bought") == [adapt_evaluation.ROUTED]
+ 
+ 
++def test_a_written_answer_holds_only_against_the_plan_its_row_has_open(
++    where: adapt_evaluation.Fixture, tmp_path: Path
++) -> None:
++    ok = adapt_set.Case(name="ok", says="ok", goes=entrance.ACCEPT_PLAN, open=entrance.ADAPTATION)
++    nothing_open = dataclasses.replace(ok, open="")
++
++    right = ran(where, ok, tmp_path, calls((entrance.ACCEPT_PLAN, {})), says("Ricevuto."))
++    wrong = ran(where, nothing_open, tmp_path, calls((entrance.ACCEPT_PLAN, {})), says("Niente."))
++
++    assert failed(right, "ok") == []
++    assert failed(wrong, "ok") == [adapt_evaluation.ROUTED]
++
++
++def test_an_answer_row_holds_whatever_is_said_as_long_as_nothing_starts(
++    where: adapt_evaluation.Fixture, tmp_path: Path
++) -> None:
++    question = adapt_set.Case(
++        name="question", says="quanto recupero?", goes=adapt_set.ANSWER, open=entrance.ADAPTATION
++    )
++
++    right = ran(where, question, tmp_path, says("Novanta secondi."))
++    wrong = ran(where, question, tmp_path, calls((entrance.TURN_DOWN_PLAN, {})), says("Un altro."))
++
++    assert failed(right, "question") == []
++    assert failed(wrong, "question") == [adapt_evaluation.ROUTED]
++
++
+ def test_asking_holds_and_acting_where_the_row_asks_counts_double(
+     where: adapt_evaluation.Fixture, holds: adapt_set.AdaptSet, tmp_path: Path
+ ) -> None:
+--- a/tests/test_adapt_set.py
++++ b/tests/test_adapt_set.py
+@@ -79,6 +79,22 @@
+         adapt_set.parse(SET.replace('goes = "ask"', 'goes = "ask"\nminutes = 20'))
+ 
+ 
++def test_a_case_names_the_plan_open_when_it_arrives() -> None:
++    holds = adapt_set.parse(SET.replace('goes = "ask"', 'goes = "accept_plan"\nopen = "mesocycle"'))
++
++    assert holds.cases[1].open == entrance.MESOCYCLE
++
++
++def test_an_answer_with_no_plan_open_is_refused() -> None:
++    with pytest.raises(adapt_set.AdaptSetError, match="which: goes accept_plan answers a plan"):
++        adapt_set.parse(SET.replace('goes = "ask"', 'goes = "accept_plan"'))
++
++
++def test_an_open_plan_of_no_kind_is_refused() -> None:
++    with pytest.raises(adapt_set.AdaptSetError, match="which: open 'workout'"):
++        adapt_set.parse(SET.replace('goes = "ask"', 'goes = "ask"\nopen = "workout"'))
++
++
+ def test_a_name_used_twice_is_refused() -> None:
+     with pytest.raises(adapt_set.AdaptSetError, match="named twice: short"):
+         adapt_set.parse(SET.replace('name = "which"', 'name = "short"'))
+--- a/tests/test_bot.py
++++ b/tests/test_bot.py
+@@ -7,6 +7,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import dataclasses
+ import json
+ import logging
+ import sqlite3
+@@ -51,7 +52,7 @@
+ from langchain_core.runnables import Runnable, RunnableConfig
+ from langchain_core.tools import BaseTool
+ from langgraph.checkpoint.base import BaseCheckpointSaver
+-from trainer.coach import bot, checkpoints, entrance, logfile, models, onboarding, planner, progress, supervisor
++from trainer.coach import bot, checkpoints, entrance, logfile, models, onboarding, planner, progress, runs, supervisor
+ from trainer.coach import logger as coach_logger
+ from trainer.coach import record as run_record
+ from trainer.engine import catalog, config, database, exclusions, mesocycles, migrations, workouts
+@@ -277,6 +278,7 @@
+             archive=kept,
+             prepared=bot.prepared(plans_on, preparing),
+             planning=bot.planning(preparing, stopping),
++            proposing=bot.proposing(plans_on),
+         ),
+         planner=plans_on,
+         logger=log if log is not None else logger_graph_of(Scripted(), checkpointer=held),
+@@ -781,7 +783,7 @@
+     (text, buttons) = watched.offers[0]
+     assert "Barbell Squat" in text and "Standing Military Press" in text
+     assert "4 cicli" in text
+-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
++    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+ 
+ 
+ def test_the_request_the_chat_planned_against_was_derived_and_not_asked_for(
+@@ -1374,10 +1376,10 @@
+     return graph.get_state(planning_on()).next
+ 
+ 
+-def test_a_valid_plan_reaches_the_chat_with_three_buttons(
++def test_a_valid_plan_reaches_the_chat_with_two_buttons(
+     catalogued: sqlite3.Connection,
+ ) -> None:
+-    """And the run is waiting on it, not finished."""
++    """And the run is waiting on it, not finished. A shorter one is written, not tapped."""
+     graph, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
+     said, say = spoken()
+     sent, offer = offered()
+@@ -1386,7 +1388,7 @@
+ 
+     (text, buttons) = sent[0]
+     assert "Barbell Squat" in text
+-    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
++    assert [label for _, label in buttons] == ["Va bene", "Non mi va"]
+     assert said == []
+     assert still_waiting(graph, thread) == ("propose",)
+     assert workout_rows(catalogued) == []
+@@ -1449,29 +1451,6 @@
+     assert said == []
+     assert workout_rows(catalogued) == []
+     assert still_waiting(graph, thread) == ("propose",)
+-
+-
+-def test_tapping_thirty_minutes_plans_against_thirty(
+-    catalogued: sqlite3.Connection,
+-) -> None:
+-    model = Scripted(
+-        turns=[AIMessage(content="Planned."), AIMessage(content="Shorter.")],
+-        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press", minutes=30)],
+-    )
+-    graph, thread, final = waiting_on_a_plan(model)
+-    sent, offer = offered()
+-    graphs = graphs_of(graph)
+-    coach = turns_of(graphs)
+-
+-    asyncio.run(
+-        coach.tapped(
+-            OWNER, CHAT, tap_on(final, thread, bot.SHORTER), channel(spoken()[1], offer)
+-        )
+-    )
+-
+-    asked = graph.get_state(planning_on()).values["request"]
+-    assert asked.budget_min == bot.SHORTER_MINUTES
+-    assert "min su 30" in sent[0][0], "rendered against the time it was asked for"
+ 
+ 
+ def test_a_tap_on_a_plan_that_has_been_superseded_says_what_happens_next(
+@@ -1632,16 +1611,6 @@
+     assert (chat_id, text) == (CHAT, "il piano")
+     ((button,),) = markup.inline_keyboard
+     assert (button.text, button.callback_data) == ("Va bene", "ok|chat:1|abc")
+-
+-
+-def test_the_button_says_the_time_it_actually_asks_for() -> None:
+-    """The label and the sentence the planner is given are one number.
+-
+-    Copied into the label, they drift the day the number changes: the plan is
+-    built for twenty minutes and the button the user tapped still said thirty.
+-    """
+-    assert str(bot.SHORTER_MINUTES) in dict(bot.BUTTONS)[bot.SHORTER]
+-    assert str(bot.SHORTER_MINUTES) in bot.SAID[bot.SHORTER]
+ 
+ 
+ def test_a_run_does_not_block_the_bot_while_the_model_thinks(
+@@ -2196,7 +2165,23 @@
+     """A tap has 64 bytes and has to find its graph in them. The actions are
+     disjoint, so the action is enough and no byte goes on saying which."""
+     assert set(dict(bot.BUTTONS)) & set(dict(bot.CONFIRM)) == set()
+-    assert set(bot.ACTIONS) == set(dict(bot.BUTTONS)) | set(dict(bot.CONFIRM))
++    assert set(bot.ACTIONS) == set(dict(bot.BUTTONS)) | set(dict(bot.CONFIRM)) | {bot.RETIRED}
++
++
++def test_the_retired_shorter_button_answers_nothing_and_says_why(
++    catalogued: sqlite3.Connection,
++) -> None:
++    """A plan offered before *Solo 30 minuti* went still carries it."""
++    graph, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
++    said, say = spoken()
++
++    asyncio.run(
++        turns_of(graphs_of(graph)).tapped(OWNER, CHAT, tap_on(final, thread, bot.RETIRED), channel(say))
++    )
++
++    assert said == [entrance.RETIRED]
++    assert still_waiting(graph, thread) == ("propose",)
++    assert workout_rows(catalogued) == []
+ 
+ 
+ # -- two models, one run -------------------------------------------------------
+@@ -2404,7 +2389,7 @@
+ 
+     ((text, buttons),) = watched.offers
+     assert "2 cicli" in text
+-    assert len(buttons) == len(bot.MESOCYCLE_BUTTONS)
++    assert len(buttons) == len(bot.BUTTONS)
+     assert mesocycles.active(catalogued) is None
+ 
+ 
+@@ -2458,7 +2443,7 @@
+     assert before is not None
+ 
+     ((_, buttons),) = asking(graphs, "d'ora in poi meno giri di squat").offers
+-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
++    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+     said, say = spoken()
+     asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, buttons[0][0], channel(say)))
+ 
+@@ -2467,6 +2452,182 @@
+     assert after is not None and after.id != before.id
+     assert after.accepted_after == before.accepted_after
+     assert after.slots[0][0].block.rounds == 2
++
++
++# -- a plan answered in words (15c.1) ------------------------------------------
++
++THIRTY = "solo 30 minuti oggi"
++
++
++class Answering:
++    """A chat with an adaptation open: its graphs, the scripted entrance, the planner, and the archive."""
++
++    def __init__(
++        self, catalogued: sqlite3.Connection, tmp_path: Path, *offered: plans.WorkoutPlan
++    ) -> None:
++        served_from(catalogued)
++        self.archive = tmp_path / "runs"
++        self.saver = InMemorySaver()
++        self.planned = Scripted(documents=[adapted_of("Barbell_Squat", rounds=2, minutes=30), *offered])
++        self.front = Talking(turns=[calling(entrance.ADAPT_THIS_WORKOUT, said=THIRTY)])
++        self.graphs = graphs_of(
++            graph_of(self.planned, checkpointer=self.saver, archive=self.archive),
++            front=self.front,
++            saver=self.saver,
++            archive=self.archive,
++        )
++        ((_, self.buttons),) = asking(self.graphs, THIRTY).offers
++        self.first = self.pending()
++
++    def pending(self) -> str:
++        held = self.graphs.negotiation.pending(planning_on())
++        assert held is not None, "nothing is open"
++        return held.id
++
++    def writes(self, text: str, *turns: AIMessage) -> Channels:
++        """The user writes `text`, and the entrance takes `turns` on it."""
++        self.front.turns = list(turns)
++        return asking(self.graphs, text)
++
++    def ended(self) -> dict[str, str]:
++        """Every run of the planner the archive holds, by run, with its ending."""
++        return {
++            one["run"]: one["ending"]
++            for one in documents(self.archive)
++            if any(node["node"] == "propose" for node in one["nodes"]) or one["plan"] is not None
++        }
++
++    def outcomes(self) -> list[str]:
++        """How each negotiation reads to `trainer runs`, from the archive and the checkpointer."""
++        return [
++            one.outcome
++            for one in runs.negotiations(runs.kept(self.archive), runs.live(self.saver))
++        ]
++
++
++def test_ok_while_an_adaptation_is_open_accepts_it_as_the_tap_does(
++    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
++) -> None:
++    chat = Answering(catalogued, tmp_path)
++    assert entrance.ACCEPT_PLAN not in chat.front.bound[0], "offered only while a plan is open"
++
++    watched = chat.writes("ok", calling(entrance.ACCEPT_PLAN))
++
++    assert entrance.ACCEPT_PLAN in chat.front.bound[-1]
++    assert watched.said == [SAYS, entrance.PRESCRIBED]
++    assert [state for _, state in workout_rows(catalogued)] == ["prescribed"]
++    assert chat.graphs.negotiation.pending(planning_on()) is None
++    assert list(chat.ended().values()) == [run_record.ACCEPTED]
++    assert runs.CUT not in chat.outcomes()
++
++
++def test_no_while_an_adaptation_is_open_turns_it_down_with_their_words(
++    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
++) -> None:
++    chat = Answering(catalogued, tmp_path, adapted_of("Standing_Military_Press", minutes=30))
++
++    watched = chat.writes("non mi piace", calling(entrance.TURN_DOWN_PLAN))
++
++    assert watched.said == [SAYS]
++    ((text, _),) = watched.offers
++    assert "Standing Military Press" in text, "the next plan follows"
++    assert "non mi piace" in "\n".join(message.text for message in chat.planned.seen[-1])
++    (turned_down,) = [one for one in documents(chat.archive) if one["ending"] == run_record.TURNED_DOWN]
++    assert turned_down["because"] == "non mi piace"
++    assert runs.CUT not in chat.outcomes()
++    assert chat.pending() != chat.first
++    assert workout_rows(catalogued) == []
++
++
++def test_a_new_ask_over_an_open_adaptation_stops_it_and_follows_it(
++    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
++) -> None:
++    chat = Answering(catalogued, tmp_path, adapted_of("Barbell_Squat", rounds=1, minutes=20))
++
++    watched = chat.writes("ho 20 minuti", calling(entrance.ADAPT_THIS_WORKOUT, said="ho 20 minuti"))
++
++    assert len(watched.offers) == 1
++    (stopped,) = [one for one in documents(chat.archive) if one["ending"] == run_record.STOPPED]
++    live = chat.graphs.planner.get_state(planning_on()).values
++    assert (live["negotiation"], live["follows"]) == (stopped["negotiation"], stopped["run"])
++    assert runs.CUT not in chat.outcomes()
++    said, say = spoken()
++    asyncio.run(turns_of(chat.graphs).tapped(OWNER, CHAT, chat.buttons[0][0], channel(say)))
++    assert said == [entrance.SUPERSEDED]
++    assert workout_rows(catalogued) == []
++
++
++def test_reporting_the_adapted_workout_ends_the_adaptation_and_its_buttons_do_nothing(
++    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
++) -> None:
++    chat = Answering(catalogued, tmp_path)
++    served = chat.writes("cosa faccio oggi?", calling(entrance.TODAYS_WORKOUT))
++    assert served.offers, "today's workout, served beside the open adaptation"
++    ((identifier, _),) = workout_rows(catalogued)
++    chat.graphs = dataclasses.replace(
++        chat.graphs,
++        logger=logger_graph_of(
++            scripted(AIMessage(content="chiaro"), emits=report(workout_id=identifier)),
++            checkpointer=chat.saver,
++            archive=chat.archive,
++        ),
++    )
++
++    watched = chat.writes("fatto, tutto come scritto", calling(entrance.LOG_WORKOUT))
++
++    assert watched.said == [SAYS, entrance.LOGGED]
++    assert chat.graphs.negotiation.pending(planning_on()) is None
++    assert list(chat.ended().values()) == [run_record.OVERTAKEN]
++    assert runs.CUT not in chat.outcomes()
++    said, say = spoken()
++    asyncio.run(turns_of(chat.graphs).tapped(OWNER, CHAT, chat.buttons[0][0], channel(say)))
++    assert said == [entrance.OVERTAKEN]
++    assert workout_rows(catalogued) == [(identifier, "performed")], "the tap changed nothing"
++
++
++def test_a_question_while_an_adaptation_is_open_is_answered_and_it_stays_open(
++    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
++) -> None:
++    chat = Answering(catalogued, tmp_path)
++
++    watched = chat.writes("quanto recupero tra le serie?", AIMessage(content="90 secondi"))
++
++    assert watched.said == ["90 secondi"]
++    assert chat.pending() == chat.first
++    assert chat.ended() == {}
++    prompt = chat.front.seen[-1][0].text
++    assert entrance.OPEN[entrance.ADAPTATION][1] in prompt
++
++
++def test_an_open_mesocycle_is_read_as_one_and_ok_keeps_it(
++    catalogued: sqlite3.Connection, declared: Path
++) -> None:
++    front = Talking(handoff=entrance.PLAN_MESOCYCLE)
++    graphs = graphs_of(graph_of(Scripted(documents=[A_MESOCYCLE]), checkpointer=InMemorySaver()), front=front)
++    assert asking(graphs, "fammi un mesociclo").offers
++    front.handoff = ""
++    front.turns = [calling(entrance.ACCEPT_PLAN)]
++
++    watched = asking(graphs, "daje")
++
++    assert entrance.OPEN[entrance.MESOCYCLE][1] in front.seen[-2][0].text
++    assert watched.said == [SAYS, entrance.KEPT]
++    assert mesocycles.active(catalogued) is not None
++
++
++def test_an_answer_with_nothing_open_is_told_so_and_answers_nothing(
++    catalogued: sqlite3.Connection, declared: Path
++) -> None:
++    """A model that calls a handoff it was not offered: the plan it thinks it answers is gone."""
++    front = Talking(turns=[calling(entrance.ACCEPT_PLAN)])
++    graphs = graphs_of(front=front)
++
++    watched = asking(graphs, "ok")
++
++    assert watched.said == [SAYS]
++    told = [m for m in front.seen[-1] if m.type == "tool"]
++    assert [m.text for m in told] == [entrance.NOTHING_OPEN]
++    assert workout_rows(catalogued) == []
+ 
+ 
+ # -- the next mesocycle, prepared (ADR-0008 item 5) ----------------------------
+@@ -2582,7 +2743,7 @@
+     assert watched.said[2].startswith(entrance.NEXT_MESOCYCLE.split("{")[0])
+     ((text, buttons),) = watched.offers
+     assert "3 cicli" in text
+-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
++    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+     assert len(watched.drafts) == drafted, "the preparation opens no draft"
+     state = graphs.planner.get_state(planning_on()).values
+     assert state["unasked"] is True
+@@ -2866,7 +3027,7 @@
+     assert answered.said == [entrance.ONBOARDED]
+     (text, buttons) = answered.offers[0]
+     assert "Barbell Squat" in text
+-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
++    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+ 
+ 
+ def test_the_interview_survives_a_restart(
+@@ -2996,7 +3157,7 @@
+ 
+     assert watched.said == [SAYS, "Con un'ora lo allungo."]
+     ((_, buttons),) = watched.offers
+-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
++    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+     assert config.load(catalogued).duration_cap_min == 60
+ 
+ 
+--- a/tests/test_logger.py
++++ b/tests/test_logger.py
+@@ -556,7 +556,7 @@
+ # -- the exclusion it may propose ----------------------------------------------
+ 
+ 
+-def proposing(identifier: int, retest: str = "2026-10-15") -> Scripted:
++def proposing(identifier: int, retest: str = "2099-10-15") -> Scripted:
+     return scripted(
+         AIMessage(content="tutto chiaro"),
+         emits=report(
+@@ -586,7 +586,7 @@
+     assert waiting.value["kind"] == logger.EXCLUSION
+     assert waiting.value["value"] == "shoulder"
+     assert waiting.value["granularity"] == "joint", "the catalog decides which"
+-    assert waiting.value["retest_date"] == "2026-10-15"
++    assert waiting.value["retest_date"] == "2099-10-15"
+     assert exclusions.active(connection, TODAY) == ()
+ 
+ 
+--- a/tests/test_mesocycles.py
++++ b/tests/test_mesocycles.py
+@@ -351,6 +351,23 @@
+     )
+ 
+ 
++def test_the_day_an_adaptation_was_asked_for_stops_being_today_once_a_workout_is_reported(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    kept = accepted(connection)
++    asked = mesocycles.today(connection).performed
++    assert mesocycles.still_today(connection, kept, asked)
++
++    _, served = mesocycles.record_served(connection, TODAY)
++    performed(connection, served)
++
++    assert not mesocycles.still_today(connection, kept, asked)
++
++
++def test_with_no_mesocycle_no_day_is_today(connection: sqlite3.Connection, two_slots: Path) -> None:
++    assert not mesocycles.still_today(connection, 1, 0)
++
++
+ def test_an_adaptation_is_todays_serving_and_leaves_the_mesocycle_alone(
+     connection: sqlite3.Connection, two_slots: Path
+ ) -> None:
+--- a/tests/test_negotiation.py
++++ b/tests/test_negotiation.py
+@@ -78,7 +78,7 @@
+     second = talks.answer(PLANNING, offered.id, planner.accepted())
+ 
+     assert isinstance(first, negotiations.Accepted) and first.workout is not None
+-    assert second == negotiations.Superseded()
++    assert second == negotiations.Superseded(ending="accepted")
+     assert len(workout_rows(catalogued)) == 1
+     assert talks.pending(PLANNING) is None
+ 
+@@ -97,6 +97,39 @@
+     assert talks.answer(PLANNING, old.id, planner.accepted()) == negotiations.Superseded()
+     assert workout_rows(catalogued) == []
+     assert talks.pending(PLANNING).id == new.id  # type: ignore[union-attr]
++
++
++def test_opening_over_a_pending_proposal_ends_it_as_stopped(
++    catalogued: sqlite3.Connection, tmp_path: Path
++) -> None:
++    talks = negotiation_of(
++        Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat")]), tmp_path
++    )
++    old = talks.open(PLANNING, BARBELL_45)
++    assert isinstance(old, negotiations.Proposed)
++
++    talks.open(PLANNING, BARBELL_45)
++
++    (written,) = (tmp_path / "runs").glob("*/*.json")
++    assert '"ending": "stopped"' in written.read_text(encoding="utf-8")
++
++
++def test_nothing_pending_ends_nothing(catalogued: sqlite3.Connection, tmp_path: Path) -> None:
++    talks = negotiation_of(Scripted(), tmp_path)
++
++    assert talks.end(PLANNING, "stopped") is None
++    assert talks.overtaken(PLANNING) is None
++
++
++def test_a_pending_workout_that_adapts_nothing_is_never_overtaken(
++    catalogued: sqlite3.Connection, tmp_path: Path
++) -> None:
++    talks = negotiation_of(Scripted(documents=[plan_of("Barbell_Squat")]), tmp_path)
++    offered = talks.open(PLANNING, BARBELL_45)
++    assert isinstance(offered, negotiations.Proposed)
++
++    assert talks.overtaken(PLANNING) is None
++    assert talks.pending(PLANNING) is not None
+ 
+ 
+ def test_a_stale_id_writes_nothing(catalogued: sqlite3.Connection, tmp_path: Path) -> None:
+--- a/tests/test_planner.py
++++ b/tests/test_planner.py
+@@ -1075,21 +1075,23 @@
+     assert "Barbell_Squat" in planned, "the plan they turned down goes with it"
+ 
+ 
+-def test_only_30_minutes_plans_again_against_the_shorter_budget(
+-    connection: sqlite3.Connection,
+-) -> None:
+-    model = Scripted(
+-        turns=[AIMessage(content="Planned."), AIMessage(content="Shorter.")],
+-        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press", minutes=30)],
+-    )
+-    graph, thread = waiting(model)
+-    graph.invoke({"request": BARBELL_45}, thread)
+-
+-    final = graph.invoke(Command(resume=planner.refused("", minutes=30)), thread)
+-
+-    assert final["request"].budget_min == 30
+-    assert final["request"].allocation == (), "divided for a budget nobody asked for"
+-    assert "30 minutes" in "\n".join(message.text for message in model.seen[-1])
++def test_a_plan_closed_unanswered_ends_its_run_and_plans_nothing_more(
++    connection: sqlite3.Connection, tmp_path: Path
++) -> None:
++    model = Scripted(turns=[AIMessage(content="Planned.")], documents=[plan_of("Barbell_Squat")])
++    graph = graph_of(model, checkpointer=InMemorySaver(), archive=tmp_path)
++    thread: RunnableConfig = {"configurable": {"thread_id": "closed"}}
++    graph.invoke(planner.starting(BARBELL_45), thread)
++    seen = len(model.seen)
++
++    final = graph.invoke(Command(resume=planner.unanswered(record.STOPPED)), thread)
++
++    assert final["ending"] == record.STOPPED
++    assert graph.get_state(thread).next == ()
++    assert len(model.seen) == seen, "nothing planned after it"
++    assert prescribed(connection) == []
++    (written,) = tmp_path.glob("*/*.json")
++    assert json.loads(written.read_text(encoding="utf-8"))["ending"] == record.STOPPED
+ 
+ 
+ def test_a_refused_plan_is_never_the_one_that_is_written(
+--- a/tests/test_runs.py
++++ b/tests/test_runs.py
+@@ -105,6 +105,39 @@
+ """
+ 
+ 
++def live(thread: str, negotiation: str, run: str, moved: str, waiting: bool) -> runs.Live:
++    return runs.Live(thread, negotiation, run, moved, waiting, {})
++
++
++def closed(negotiation: str, run: str, ending: str) -> runs.Run:
++    stamp = "2026-10-07T10:00:00+00:00"
++    return runs.Run(negotiation, run, None, stamp, stamp, ending, {})
++
++
++def test_a_run_carried_into_the_planner_is_live_once_and_reads_waiting() -> None:
++    """The entrance's thread holds the run it carried, unanswered and not
++    waiting; the planner's, which moved after it, holds the proposal."""
++    found = runs.negotiations(
++        (),
++        (
++            live("chat:1/plan", "n1", "r1", "2026-10-07T10:01:00+00:00", waiting=True),
++            live("chat:1", "n1", "r1", "2026-10-07T10:00:00+00:00", waiting=False),
++        ),
++    )
++
++    assert [one.outcome for one in found] == [runs.WAITING]
++
++
++def test_a_run_written_under_the_negotiation_it_followed_into_is_no_second_one() -> None:
++    """A new ask over an open proposal follows it; the entrance minted another name for it."""
++    found = runs.negotiations(
++        (closed("n1", "r1", run_record.STOPPED), closed("n1", "r2", run_record.ACCEPTED)),
++        (live("chat:1", "n2", "r2", "2026-10-07T10:00:00+00:00", waiting=False),),
++    )
++
++    assert [(one.negotiation, one.outcome) for one in found] == [("n1", run_record.ACCEPTED)]
++
++
+ # -- a run ends, and the ending is written ------------------------------------
+ 
+ 
