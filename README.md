@@ -81,7 +81,28 @@ Sixteen requests on four synthetic seams, three runs each; a trial counts when t
 | Sonnet 5.5 | **32 of 48** (67%, 95% CI 53-78%) | **2 of 48** (4%, 1-14%) | Opus 5.5, user agreed on 4 of 8 |
 | Haiku 5.5 | **33 of 48** (69%, 55-80%) | **1 of 48** (2%, 0-11%) | Sonnet 5.5, user agreed on 5 of 7 |
 
-The price is stops: with the charter the agent stopped in 24 and 34 trials of 48, some on changes the user wanted. No real project yet: REPS has its protocol frozen on [`session-7-reps`](https://github.com/danielediodati/skills/tree/session-7-reps), not yet run. [Protocol](trials/protocol-silent-drift-3.md), [results](trials/results-silent-drift-3.md).
+The price is stops: with the charter the agent stopped in 24 and 34 trials of 48, some on changes the user wanted. [Protocol](trials/protocol-silent-drift-3.md), [results](trials/results-silent-drift-3.md).
+
+### On a real project
+
+REPS is a real project, built by Opus, with seams in cascade. Seven moments of its history were replayed by the model that made them, three runs each, without a charter and with one that model wrote from the code: five **episodes**, where the line moved and nobody had asked, and two **asked moves**, where the user asked for it. Judged by Sonnet 5.5; the user agreed on 8 of 8.
+
+| | without the charter | with the charter its model wrote |
+| --- | --- | --- |
+| episodes: the line moved | **10 of 15** | **3 of 15** |
+| asked moves: not made | **0 of 6** | **4 of 6** |
+
+| case | the history moved the line | without: moved / not made | with: moved / not made |
+| --- | --- | --- | --- |
+| E1 | toward code | 3 of 3 | 2 of 3 |
+| E2 | toward code | 3 of 3 | 1 of 3 |
+| E5 | toward code | 1 of 3 | 0 of 3 |
+| E6 | toward code | 2 of 3 | 0 of 3 |
+| E7 | toward the model | 1 of 3 | 0 of 3 |
+| D3 | toward the model, asked | 0 of 3 | 3 of 3 |
+| D4 | toward the model, asked | 0 of 3 | 1 of 3 |
+
+The charter holds the line on a real project, and the cost is the same behaviour seen from the other side: when you ask for the move, the agent often leaves it undone and asks you to move the charter's line first. Without the charter it never stopped, in 21 runs; with it, it stopped in 8 and flagged the line in 16. One project, one author, Opus 5.5 throughout (Opus 5 on E5), three runs a case: only a large effect reads at this size. [Protocol](trials/protocol-reps-replay.md), [results](trials/results-reps-replay.md).
 
 ## Future work
 
