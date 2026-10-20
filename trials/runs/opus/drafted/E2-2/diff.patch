@@ -1,0 +1,117 @@
+--- /dev/null
++++ b/docs/methodology.md
+@@ -0,0 +1,105 @@
++# Methodology
++
++What a good workout is, for the planner to judge against. The engine says what is possible (ADR-0001); this says what is worth doing. Every line is a criterion for the model's judgement, never a rule a validator reads: departing from one is allowed, and the block's `reason` says why.
++
++> **Draft, 2026-10-17, written by the agent for the user to edit** (ticket 11.2). Nothing reads it yet. Lines marked **[?]** are the agent's proposal where the user's own practice is not known. Sources are cited from memory and have not been checked against the papers.
++
++## 1. A workout is working sets, then rest, then exercises
++
++Build the plan in this order, and spend time in the same order:
++
++1. **Working sets per group** decide the plan.
++2. **Rest** is what those sets need to be done well.
++3. **Exercises** are the fewest that deliver those sets.
++
++The time is a consequence of the three, never the thing being optimised. A structure chosen because it fits the clock is the failure this document exists for.
++
++## 2. A working set
++
++| | |
++|---|---|
++| **effort** | ended 1-3 reps short of failure (RIR 1-3) [Zourdos 2016; Refalo 2023] |
++| **reps** | 6-15 on a compound, 10-20 on an isolation [?]; 5 to 30 all build muscle when taken close to failure [Schoenfeld, Grgic 2017] |
++| **too easy** | more than about 20 clean reps of a body-weight or band exercise: pick the harder exercise (`regression_of`, read upward), not more reps and not another exercise |
++| **not a working set** | warm-up and ramp-up sets; a plan cannot write them yet (ADR-0002) |
++
++The `amount` in the plan is the target reps at that effort. A bare *8 reps* with no effort says nothing about how hard the set is.
++
++## 3. How many sets and exercises a group gets
++
++| a group's share of the workout | working sets | exercises |
++|---|---|---|
++| under 10 min | 3-4 | 1 |
++| 10-20 min | 4-8 | 1-2 |
++| over 20 min | 6-10 | 2-3 |
++
++- **Per muscle, per cycle**: about 10 working sets or more is where most of the gain is [Schoenfeld, Ogborn, Krieger 2017]. One workout does not have to carry all of it when the split trains the group twice. [?]
++- **The first exercise of a group is its main compound**: the movement pattern the group is trained for (horizontal push for chest, horizontal or vertical pull for back, squat or hinge for legs). Accessories come after.
++- **A second exercise for the same muscle earns its place** with a different pattern, angle or joint action. Two exercises linked by `variant_of` are one exercise twice. Four push-up variants for chest is the case this line is written against.
++- **Sets before exercises.** Three sets of two exercises beat one set each of six.
++
++## 4. Rest by intent
++
++| intent | rest after a round | why |
++|---|---|---|
++| heavy compound, 5-8 reps | 2.5-3 min | the next set is only as good as the recovery before it [Schoenfeld 2016; ACSM 2009] |
++| compound, 8-15 reps | 90-120 s | |
++| isolation | 60-90 s | |
++| antagonist superset | the rest the harder of the two needs | each muscle rests while the other works [Robbins 2010] |
++| circuit for conditioning | 30-60 s | the point is the heart rate, not each set |
++
++Rest is never cut to fit the clock. A plan that only fits with less rest has too many sets or exercises.
++
++## 5. Straight sets, superset or circuit
++
++| structure | reach for it when | not when |
++|---|---|---|
++| **straight sets** | the main compound of each group; anything heavy | |
++| **superset** | two exercises that do not compete: antagonists (push and pull, biceps and triceps), or upper and lower body. It saves time and costs the sets little [Robbins 2010] | the two share a primary muscle, unless it is a deliberate intensity technique on an accessory, said in the `reason` |
++| **circuit** | conditioning, or many groups in little time (*"30 minutes, but everything"*): one exercise per group, groups that do not compete | the exercises train the same muscle; it is the group's working sets; the reason is that it fits [Weakley 2017: perceived effort rises with every exercise added] |
++
++The test of a circuit or superset: would the same exercises be prescribed as straight sets if the time allowed? If yes, the structure is saving time, which is fine. If the exercises were added *because* the structure made them cheap, it is the cheap shape.
++
++## 6. When the plan comes in under the time
++
++Fill it in this order:
++
++1. a round more on the exercises already there, main compounds first;
++2. rest toward the top of its band;
++3. an exercise for a muscle of the requested groups not yet trained;
++4. a second exercise for a group, by §3.
++
++Never another variant of an exercise already in the plan, and never a longer circuit.
++
++## 7. Worked example
++
++The request that opened ticket 11.2: chest and arms, 45 minutes, body weight and bands. The catalog has no band or body-weight biceps exercise, so *arms* is triceps today.
++
++| block | structure | rounds × target | rest |
++|---|---|---|---|
++| Push-Up Wide, or a harder push-up if 15 are easy | straight sets | 4 × 8-15, RIR 1-2 | 2 min |
++| Cross Over - With Bands | straight sets | 3 × 12-15, RIR 1-2 | 75 s |
++| Bench Dips | straight sets | 3 × 8-15, RIR 1-2 | 90 s |
++| Band Skull Crusher | straight sets | 3 × 12-20, RIR 1-2 | 60 s |
++
++Four exercises and 13 working sets, against the observed plan's nine exercises at *8 reps each* with no effort. Not costed by the engine: if it lands under the floor, §6 adds a round to the push-up and the dips first.
++
++## Open for the user
++
++- **Goal.** Everything above assumes muscle and strength together, which is what the 8-week criterion measures (loads on the main patterns). Is that the goal until onboarding asks?
++- **Rep ranges and RIR** in §2: yours, or these?
++- **The minute bands** in §3: do they match how you split a session?
++- **Failure.** Is any set taken to failure, e.g. the last round of an isolation?
++- **Same-muscle supersets** (pre-exhaust, compound sets): do you use them at all?
++- **Core.** It gets no row here; is it a group with working sets like the others, or a finisher?
++
++## Sources
++
++- ACSM (2009). Progression models in resistance training for healthy adults. *Med Sci Sports Exerc* 41(3):687-708.
++- Refalo MC, Helms ER, Trexler ET, Hamilton DL, Fyfe JJ (2023). Influence of resistance training proximity-to-failure on skeletal muscle hypertrophy: a systematic review with meta-analysis. *Sports Med* 53(3):649-665.
++- Robbins DW, Young WB, Behm DG, Payne WR (2010). Agonist-antagonist paired set resistance training: a brief review. *J Strength Cond Res* 24(10):2873-2882.
++- Schoenfeld BJ, Grgic J, Ogborn D, Krieger JW (2017). Strength and hypertrophy adaptations between low- vs. high-load resistance training: a systematic review and meta-analysis. *J Strength Cond Res* 31(12):3508-3523.
++- Schoenfeld BJ, Ogborn D, Krieger JW (2017). Dose-response relationship between weekly resistance training volume and increases in muscle mass: a systematic review and meta-analysis. *J Sports Sci* 35(11):1073-1082.
++- Schoenfeld BJ, Pope ZK, Benik FM, et al. (2016). Longer interset rest periods enhance muscle strength and hypertrophy in resistance-trained men. *J Strength Cond Res* 30(7):1805-1812.
++- Weakley JJS, Till K, Read DB, et al. (2017). The effects of traditional, superset, and tri-set resistance training structures on perceived intensity and physiological responses. *Eur J Appl Physiol* 117(9):1877-1889.
++- Zourdos MC, Klemp A, Dolan C, et al. (2016). Novel resistance training-specific rating of perceived exertion scale measuring repetitions in reserve. *J Strength Cond Res* 30(1):267-275.
+--- a/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
++++ b/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
+@@ -30,4 +30,6 @@
+ 
+ ## Comments
+ 
++**Draft, 2026-10-17**: `docs/methodology.md`, written by the agent at the user's request, for the user to edit. Every line is a criterion for the model's judgement, so the planner charter's *Free* list stands as it is. Not yet read by the brief; how it reaches `PLANNING` is specified once the user has edited it.
++
+ Issue 03 puts a floor under the clock. It does not fix this: given a floor and no methodology, filling the time by adding a tenth exercise to a circuit is still the cheapest move available.

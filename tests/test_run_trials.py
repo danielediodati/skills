@@ -274,5 +274,200 @@ class CommandLine(unittest.TestCase):
             self.assertEqual((done.returncode, done.stdout.strip()), (0, "0 trials to judge"), done.stderr)
 
 
+HAS_REPS = (load(RUN_TRIALS).REPS / ".git").exists()
+
+
+class RepsCases(unittest.TestCase):
+    """The chosen REPS cases say where they start and which line and seams they are judged on."""
+
+    def test_each_chosen_case_has_a_parent_a_request_one_line_and_its_seams(self):
+        runner, judge = load(RUN_TRIALS), load(RUN_JUDGE)
+        for name, parent in (("E1", "674648c"), ("E2", "a9b2c50"), ("E7", "521bce2"), ("E5", "f82c382"),
+                             ("E6", "ed911df"), ("D3", "d9ee707"), ("D4", "c2e8e2a")):
+            folder, found, seams = runner.reps_case(name)
+            self.assertEqual(found, parent, name)
+            self.assertTrue((folder / "request.md").read_text(encoding="utf-8").strip(), name)
+            self.assertEqual(len(judge.charter_lines(folder.name)), 1, name)
+            self.assertTrue(all(where.startswith("`src/") for where in seams.values()), name)
+        self.assertEqual(list(runner.reps_case("E1")[2]), ["entrance", "planner"])
+
+    def test_the_session_holds_no_provider_key(self):
+        runner = load(RUN_TRIALS)
+        with mock.patch.dict(runner.os.environ, {"GROQ_API_KEY": "x", "OPENROUTER_API_KEY": "y"}):
+            env = runner.session_env()
+        self.assertNotIn("GROQ_API_KEY", env)
+        self.assertNotIn("OPENROUTER_API_KEY", env)
+
+    def test_a_session_that_times_out_is_a_failed_trial_not_a_crash(self):
+        runner = load(RUN_TRIALS)
+        with tempfile.TemporaryDirectory() as tmp:
+            runner.WORK_ROOT = Path(tmp) / "work"
+            timeout = runner.subprocess.TimeoutExpired(["claude"], 1)
+            with mock.patch.object(runner.subprocess, "run", side_effect=timeout):
+                _, session = runner.run("sonnet", "without", "triage_ticket-04-1", SEAM,
+                                        SEAM / "requests" / "04.md", Path(tmp) / "out")
+        self.assertTrue(session["is_error"])
+
+
+@unittest.skipUnless(HAS_REPS, "no REPS clone")
+class RepsTrial(unittest.TestCase):
+    """What a replay's agent finds in its directory and in its system prompt, per condition."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.runner = load(RUN_TRIALS)
+        self.runner.WORK_ROOT = Path(self._tmp.name) / "work"
+        self.runner.CHARTERS_AUTO = Path(self._tmp.name) / "drafts"
+
+    def draft(self, case: str, seam: str, n: int) -> None:
+        path = self.runner.CHARTERS_AUTO / "opus" / f"{case}-{seam}-{n}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"# {seam} charter, draft {n}\n", encoding="utf-8")
+
+    def prepare(self, condition: str, trial_id: str) -> Path:
+        folder = self.runner.reps_case(trial_id.rsplit("-", 1)[0])[0]
+        return self.runner.prepare("opus", condition, trial_id, folder)
+
+    def test_without_is_reps_at_the_parent_with_no_repository_and_its_own_instructions(self):
+        work = self.prepare("without", "D4-1")
+        self.assertTrue((work / "docs/work/15c-portfolio-ready/issues/01-a-plan-is-answered-in-words-too.md").exists())
+        for absent in (".git", "evals", "AGENTS.md", ".env"):
+            self.assertFalse((work / absent).exists(), absent)
+        claude_md = (work / "CLAUDE.md").read_text(encoding="utf-8")
+        self.assertNotIn("## Stochastic seams", claude_md)
+        self.assertIn(claude_md, self.runner.system_prompt_args("without", work)[1])
+
+    def test_drafted_gives_each_repeat_its_own_draft_of_every_seam_and_the_rule_in_claude_md(self):
+        for seam in ("entrance", "planner"):
+            for n in (1, 2, 3):
+                self.draft("D3", seam, n)
+        work = self.prepare("drafted", "D3-2")
+        for seam in ("entrance", "planner"):
+            self.assertEqual((work / "evals" / seam / "charter.md").read_text(encoding="utf-8"),
+                             f"# {seam} charter, draft 2\n")
+        claude_md = (work / "CLAUDE.md").read_text(encoding="utf-8")
+        self.assertTrue(claude_md.startswith("# REPS"))
+        rule = claude_md[claude_md.index("## Stochastic seams"):]
+        shipped = self.runner.SETUP_SKILL.read_text(encoding="utf-8")
+        for line in rule.splitlines():
+            self.assertIn(line.strip(), shipped)
+        self.assertFalse((work / "AGENTS.md").exists())
+        self.assertIn(rule, self.runner.system_prompt_args("drafted", work)[1])
+
+    def test_a_draft_missing_stops_the_trial_before_it_starts(self):
+        with self.assertRaises(FileNotFoundError):
+            self.prepare("drafted", "D4-3")
+
+    def test_the_diff_leaves_out_the_install_and_any_file_that_is_not_text(self):
+        work = self.prepare("without", "D4-1")
+        self.assertTrue((work / ".venv").exists())
+        before = self.runner.snapshot(work)
+        (work / "README.md").write_text("changed\n", encoding="utf-8")
+        (work / "docs" / "draft.md").write_text("a new draft\n", encoding="utf-8")
+        (work / ".venv" / "x.py").write_text("ignored\n", encoding="utf-8")
+        (work / "trainer.sqlite").write_bytes(b"SQLite format 3\x00\xff\xfe")
+        diff = self.runner.unified_diff(before, self.runner.snapshot(work))
+        self.assertIn("+++ b/README.md", diff)
+        self.assertIn("+++ b/docs/draft.md", diff)
+        self.assertNotIn("b/.venv", diff)
+        self.assertNotIn("b/trainer.sqlite", diff)
+
+    def test_a_replay_records_its_parent_and_lets_the_agent_run_uv(self):
+        args = self.runner.claude_args(self.runner.reps_case("E1")[0])
+        self.assertIn("Bash(uv *)", args[args.index("--allowedTools") + 1])
+        self.assertNotIn("Bash(uv *)", " ".join(self.runner.claude_args(SEAM)))
+
+
+@unittest.skipUnless(HAS_REPS, "no REPS clone")
+class RepsCharterWriter(unittest.TestCase):
+    """A REPS draft is written from the charter skill as the plugin ships it, in REPS at the parent."""
+
+    def test_it_gets_the_skill_reps_at_the_parent_and_a_prompt_naming_the_seam(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = load(WRITE_CHARTERS)
+            writer.WORK_ROOT = Path(tmp)
+            work = writer.prepare_reps("E7", "planner", "opus", 1)
+            self.assertEqual((work / "brief.md").read_text(encoding="utf-8"),
+                             (TRIALS.parent / "a4a" / "skills" / "charter" / "SKILL.md").read_text(encoding="utf-8"))
+            self.assertFalse((work / "evals").exists())
+            self.assertTrue((work / "src" / "trainer" / "coach" / "planner.py").exists())
+            prompt = writer.reps_prompt("E7", "planner")
+            self.assertIn("`planner`", prompt)
+            self.assertIn("`evals/planner/charter.md`", prompt)
+
+    def test_three_drafts_per_seam_of_a_case_and_one_already_there_is_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = load(WRITE_CHARTERS)
+            writer.CHARTERS_AUTO = Path(tmp)
+            (Path(tmp) / "opus").mkdir()
+            (Path(tmp) / "opus" / "E1-planner-2.md").write_text("written once", encoding="utf-8")
+            todo = writer.reps_to_write("opus", ["E1"])
+            self.assertEqual(len(todo), 5)
+            self.assertNotIn(("E1", "planner", 2), todo)
+
+
+@unittest.skipUnless(HAS_REPS, "no REPS clone")
+class RepsJudge(unittest.TestCase):
+    """What the judge of a replay reads, and who it is."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.judge = load(RUN_JUDGE)
+
+    def replay(self, case_dir: str, parent: str, diff: str = "", model: str = "claude-opus-5-5") -> Path:
+        trial = Path(self._tmp.name) / f"{case_dir}-1"
+        trial.mkdir()
+        (trial / "session.json").write_text(json.dumps(
+            {"request": f"reps/{case_dir}/request.md", "model": model, "parent": parent}), encoding="utf-8")
+        (trial / "diff.patch").write_text(diff, encoding="utf-8")
+        (trial / "answer.md").write_text("Done. As CLAUDE.md says, I stopped. Opus out.", encoding="utf-8")
+        return trial
+
+    def test_sonnet_judges_opus_5(self):
+        trial = self.replay("E5-the-exclusion-vocabulary-as-an-enum", "f82c382", model="claude-opus-5")
+        self.assertEqual(self.judge.judge_model(trial), "claude-sonnet-5-5")
+
+    def test_it_reads_the_amendment_the_line_the_ticket_and_the_files_before_blind_to_the_charter(self):
+        diff = ("--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-x\n+y\n"
+                "--- a/CLAUDE.md\n+++ b/CLAUDE.md\n@@ -1 +1 @@\n-x\n+y\n"
+                "--- /dev/null\n+++ b/evals/planner/charter.md\n@@ -0,0 +1 @@\n+z\n")
+        case = "E2-the-methodology-as-a-recipe"
+        prompt = self.judge.prompt(self.replay(case, "a9b2c50", diff))
+        self.assertIn("# A replay on a real project", prompt)
+        self.assertIn((TRIALS / "reps" / case / "line.md").read_text(encoding="utf-8"), prompt)
+        self.assertIn("# Nobody ever told the planner what a good workout is", prompt)
+        self.assertIn("*Reasoning Engine for Personal Strength.*", prompt)
+        inputs = prompt.split("# The inputs", 1)[1]
+        self.assertNotIn("CLAUDE.md", inputs)
+        self.assertNotIn("evals/planner", inputs)
+        self.assertNotIn("Opus out", inputs)
+
+    def test_a_ticket_missing_at_the_parent_is_said_so(self):
+        trial = self.replay("E1-adaptation-bound-to-the-slot", "674648c")
+        with mock.patch.object(self.judge, "at_parent", return_value=None):
+            prompt = self.judge.prompt(trial)
+        self.assertIn("(not in the project at that commit)", prompt)
+
+    def test_a_replay_is_judged_once_its_verdict_has_the_lines_row(self):
+        trial = self.replay("D4-a-plan-answered-in-words", "c2e8e2a")
+        self.assertFalse(self.judge.judged(trial))
+        (trial / "verdict.md").write_text("| C1 | held | not touched |\n", encoding="utf-8")
+        self.assertTrue(self.judge.judged(trial))
+
+
+class RepsCommandLine(unittest.TestCase):
+    """The runner and the writer take REPS cases; nothing matches, so nothing runs."""
+
+    def test_the_runner_and_the_writer_take_reps_cases(self):
+        with tempfile.TemporaryDirectory() as runs:
+            done = command(RUN_TRIALS, "without", "--model", "opus-5", "--reps", "E5", "--only", "none",
+                           "--runs", runs)
+            self.assertEqual((done.returncode, done.stdout.strip()), (0, "0 trials to run"), done.stderr)
+        done = command(WRITE_CHARTERS, "reps", "--model", "opus", "--cases")
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "0 charters to write"), done.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

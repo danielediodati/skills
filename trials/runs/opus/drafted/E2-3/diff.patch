@@ -1,0 +1,98 @@
+--- /dev/null
++++ b/docs/methodology.md
+@@ -0,0 +1,87 @@
++# What a workout is
++
++The methodology the planner judges against. A human writes it (TRAINER.md); the engine never holds it and the validator never checks it (ADR-0001). Every line is a criterion for the planner's judgement, not a rule: where the planner has a reason to go another way, it goes, and says why in the block's `reason`.
++
++**Draft.** Written for the user to edit. The sources are cited from memory and have not been checked against the papers.
++
++Vocabulary is CONTEXT.md's. A **set** is one round of one exercise.
++
++## A working set
++
++| | criterion | source |
++|---|---|---|
++| effort | ends 0-3 reps short of failure; a set that ends far from it does not count as one | [5] |
++| reps | anywhere from about 6 to 30 builds muscle if the effort holds; heavy low-rep work builds strength best | [3], [6] |
++| body weight and bands | the load is fixed, so the **variant** sets the effort: pick the one whose failure lands inside the rep target, and progress by making it harder, not by adding reps without end | [3], [7] |
++| warm-up sets | not working sets; they cost time and count for nothing here | |
++
++## How much a group gets
++
++| | criterion | source |
++|---|---|---|
++| per muscle, per cycle | at least 10 working sets; fewer still works, more works better up to a point nobody has pinned down | [1] |
++| per group, per workout | about 4-10 working sets, more when the group appears once in the cycle and fewer when it appears twice | [1], [2] |
++| exercises per group | 1-3. A second exercise is there for a different pattern, muscle or length, not for variety | [2] |
++| sets per exercise | 2-4. Add a set before adding an exercise | [2] |
++| variants of one movement | four push-up variants are one movement four times; the second variant earns its place only if it shifts the work (incline vs decline, wide vs close) | |
++
++## Rest by intent
++
++The bands in `PLANNING` stand. The reason for them:
++
++| intent | rest | why | source |
++|---|---|---|---|
++| heavy compound, strength | 2-3 min | short rest costs reps on the next set, and reps are the stimulus | [4] |
++| compound, hypertrophy | 90-120 s | long enough that the next set is still a working set | [4], [8] |
++| isolation, small muscle | 60-90 s | the muscle recovers faster and the whole body is barely taxed | [8] |
++| between paired exercises | 0-30 s | the partner set is the other muscle's rest | [9] |
++
++Shorter rest is not free time: it buys minutes by lowering the quality of every set after the first.
++
++## Which structure
++
++| structure | reach for it when | avoid it when | source |
++|---|---|---|---|
++| **straight sets** | the main movement of a group, heavy or hard work, the first block of the workout | | [8] |
++| **superset**, antagonists or unrelated groups | time is short and the two do not compete: push with pull, biceps with triceps, chest with core. Saves about half the rest with no loss of reps | | [8], [9] |
++| **superset**, same muscle | finishing a group already worked, on purpose | it is the main work: the second exercise starts tired | [8] |
++| **circuit** | conditioning is the goal, or the time is so short that a full-body circuit is the only way to touch every group | it is how the plan fits the clock. Five exercises for one muscle in a circuit are five sets done tired, not five exercises | [8] |
++
++**The test for a circuit or a superset**: would the same exercises as straight sets be the better workout if the time allowed? If yes, and the time does allow, use straight sets.
++
++## Spending the time
++
++- **The time is spent on working sets, not on exercises.** With time left, add a set to an exercise already in the plan before adding a new one.
++- **Main work first**: the hardest movement for each group while fresh, isolation after.
++- **Every group asked for gets its main work before any group gets extra.**
++
++## An example
++
++Chest and arms, 45 minutes, body weight and bands. A shape, not an answer; the minutes are the engine's to compute.
++
++| block | exercises | rounds | rest | why |
++|---|---|---|---|---|
++| 1 | push-up, the variant that fails at 8-12 | 4 | 2 min | main chest work, fresh |
++| 2 | band chest fly + band curl | 3 | 90 s | second chest angle, paired with an arm muscle that does not compete |
++| 3 | bench dip | 3 | 90 s | main triceps work |
++| 4 | band overhead triceps extension + band hammer curl | 3 | 60 s | the long head of the triceps, and the forearm side of the biceps |
++
++Seven exercises, not nine; chest 7 sets, triceps 6, biceps 6. The session-7 plan had four push-up variants for 12 sets of one movement.
++
++## Not here
++
++- What is admissible, what fits, what repeats: the engine's.
++- Progression and return from a break: after 1.0.0 (ROADMAP).
++- The goal: chosen at onboarding (TRAINER.md). This draft assumes **muscle and strength together**; a goal of conditioning or of pure strength changes the rest and structure tables first.
++
++## Sources
++
++1. Schoenfeld BJ, Ogborn D, Krieger JW. Dose-response relationship between weekly resistance training volume and increases in muscle mass: a systematic review and meta-analysis. *J Sports Sci*. 2017;35(11):1073-1082.
++2. American College of Sports Medicine. Progression models in resistance training for healthy adults. *Med Sci Sports Exerc*. 2009;41(3):687-708.
++3. Schoenfeld BJ, Grgic J, Ogborn D, Krieger JW. Strength and hypertrophy adaptations between low- vs. high-load resistance training: a systematic review and meta-analysis. *J Strength Cond Res*. 2017;31(12):3508-3523.
++4. Schoenfeld BJ, Pope ZK, Benik FM, et al. Longer interset rest periods enhance muscle strength and hypertrophy in resistance-trained men. *J Strength Cond Res*. 2016;30(7):1805-1812.
++5. Refalo MC, Helms ER, Trexler ET, Hamilton DL, Fyfe JJ. Influence of resistance training proximity-to-failure on skeletal muscle hypertrophy: a systematic review with meta-analysis. *Sports Med*. 2023;53(3):649-665.
++6. Lopez P, Radaelli R, Taaffe DR, et al. Resistance training load effects on muscle hypertrophy and strength gain: systematic review and network meta-analysis. *Med Sci Sports Exerc*. 2021;53(6):1206-1216.
++7. Lopes JSS, Machado AF, Micheletti JK, et al. Effects of training with elastic resistance versus conventional resistance on muscular strength: a systematic review and meta-analysis. *SAGE Open Med*. 2019;7.
++8. Iversen VM, Norum M, Schoenfeld BJ, Fimland MS. No time to lift? Designing time-efficient training programs for strength and hypertrophy: a narrative review. *Sports Med*. 2021;51(10):2079-2095.
++9. Robbins DW, Young WB, Behm DG. The effect of an upper-body agonist-antagonist resistance training protocol on volume load and efficiency. *J Strength Cond Res*. 2010;24(10):2632-2640.
+--- a/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
++++ b/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
+@@ -31,3 +31,5 @@
+ ## Comments
+ 
+ Issue 03 puts a floor under the clock. It does not fix this: given a floor and no methodology, filling the time by adding a tenth exercise to a circuit is still the cheapest move available.
++
++**2026-10-17**: a draft of the methodology is at `docs/methodology.md`, for the user to edit. Its sources are cited from memory and unchecked. Nothing reads it yet.

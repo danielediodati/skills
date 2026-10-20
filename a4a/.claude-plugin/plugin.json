@@ -1,6 +1,6 @@
 {
   "name": "a4a",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Agents for agents: agentic engineering of agentic systems. Skills for building, with coding agents, systems where a model decides, keeping freedom and constraint where you put them. Seam charters, eval-driven development.",
   "author": {
     "name": "Daniele Diodati"

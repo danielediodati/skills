@@ -1,0 +1,122 @@
+--- a/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
++++ b/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
+@@ -30,4 +30,6 @@
+ 
+ ## Comments
+ 
++**Draft written, 2026-10-17**: `src/trainer/data/methodology.md`, by the agent at the user's request, for the user to edit. Still `needs-info` until the user has edited it and answered its **Decide** lines. Not yet read by the planner; wiring it into `PLANNING` and `MESOCYCLE_PLANNING`, and how a plan is judged against it (ADR-0010 has the shape: a declared bar, not 100%), is what this ticket specifies next.
++
+ Issue 03 puts a floor under the clock. It does not fix this: given a floor and no methodology, filling the time by adding a tenth exercise to a circuit is still the cheapest move available.
+--- /dev/null
++++ b/src/trainer/data/methodology.md
+@@ -0,0 +1,110 @@
++# What a workout is
++
++> **DRAFT for the user to edit.** Written by the agent from TRAINER.md, the glossary and the sources below; nothing here is the user's until they have edited it. Lines marked **Decide** are the questions the draft could not answer on the user's behalf.
++
++The planner reads this as method, not as rules. The engine still checks only legality (ADR-0001); everything below is judgement the agent exercises and explains in each block's `reason`.
++
++## 1. A workout is built from working sets
++
++A **working set** is one round of one exercise taken close to failure. Anything else is warm-up or filler and is not what a workout is made of.
++
++| | default | source |
++|---|---|---|
++| effort | stop 1-3 reps short of failure | [3], [6] |
++| reps | 6-15; up to 20-30 only on band or body-weight work that cannot be loaded further | [4], [5] |
++| too easy | more than ~20 clean reps means the **variant** is wrong: move along `regression_of` / `variant_of` (`compare_variants`) to a harder one, never add a second variant beside it | — |
++| too hard | fewer than 5 reps on body weight: the regression | — |
++| rounds | 3-4 for a working exercise; **1 round is a warm-up**, never a working exercise | [1], [2] |
++
++**Decide:** the reps-in-reserve target, and whether the plan should carry it. The schema has no field for it today (`PlanItem` holds reps or seconds only).
++
++## 2. How many exercises a group gets
++
++Volume is what the time buys, so the count follows from the minutes, not from a menu.
++
++- One working exercise at 3-4 rounds costs **6-10 minutes** at the rest in § 3 (`rounds × (reps × 3 s + rest)`, plus setup).
++- So a group gets roughly **its allocated minutes ÷ 8** exercises, at least one, at most three.
++- Two exercises for one group must differ in **pattern or angle** (a horizontal press and a fly; a curl and a hammer curl). Two variants of the same movement are one exercise prescribed twice.
++- Covering every group once comes before a second exercise for any of them (already in the brief).
++
++| group's minutes | exercises |
++|---|---|
++| under 8 | 1 |
++| 8-18 | 2 |
++| over 18 | 2-3 |
++
++**Decide:** a volume target per muscle per cycle. The literature speaks in sets per **week** (≥10 per muscle [1]); REPS counts rounds per **cycle** (`volume_denominator`), so the number has to be the user's.
++
++## 3. Rest follows intent
++
++Rest is prescribed per block (ADR-0002). Inside a block there is **no rest between exercises**: the rest comes after the whole round.
++
++| intent | example | rest after the round | source |
++|---|---|---|---|
++| strength | compound, ≤ 6 reps | 2.5-3 min, more if needed | [2], [7] |
++| hypertrophy, compound | push-up, row, squat at 6-15 | 90-180 s | [2], [8] |
++| isolation | curl, extension, raise | 60-90 s | [7] |
++| superset of non-competing muscles | curl + triceps extension | 60-120 s after the pair | [9] |
++| conditioning / core circuit | plank, carry, mountain climber | 30-60 s | — |
++
++**Decide:** the hypertrophy band. TRAINER.md says 90-120 s; [2] found 3 min beat 1 min on compounds in trained men. Widening it is a TRAINER.md edit as well.
++
++## 4. Which structure, and when
++
++The block is chosen for what it does to the training, never for what it does to the clock. A circuit is cheap because it pays one rest per round; that saving is only real when the exercises in it do not tire the same muscle.
++
++| structure | reach for it when | never |
++|---|---|---|
++| **straight sets** | the first, heaviest exercise of the workout; anything loaded or high in `required_stability`; the default | — |
++| **superset** | two exercises whose **primary muscles do not overlap**: antagonists (biceps / triceps, push / pull) or upper / lower. It saves real time [9], [10] | two exercises for the same muscle: the second set is done with no rest and the pair is one exercise done badly |
++| **circuit** | warm-up, core, conditioning; or a very short workout (≤ 20 min) that must still touch every group, with each station on a different muscle | variants of one movement; the main work of a group; a way to fit more exercises into the time |
++
++Tests a block should pass, each one written into its `reason`:
++- **Why this structure?** "Antagonists, so the rest overlaps" is a reason. "It fits" is not.
++- **Does any muscle appear twice in it as primary?** Then it is not a superset or a circuit; split it.
++
++## 5. Order
++
++1. Compound before isolation; larger muscles before smaller [7].
++2. The exercise that needs the most skill or stability first, while fresh.
++3. Core and conditioning last, unless they are the workout.
++
++**Decide:** a warm-up. ADR-0002 forbids ramp-up sets on the same exercise, so a warm-up is either a different light exercise in its own block (and costs minutes) or done outside the plan.
++
++## 6. The test case
++
++Chest and arms, 45 minutes, body weight and bands. What the bot produced in session 7:
++
++| | blocks | why it is wrong |
++|---|---|---|
++| block 1 | four push-up variants, 3 rounds, 8 reps | one movement four times, far from failure at 8 reps, no rest between them |
++| block 2 | five triceps exercises, 3 rounds, 10 reps | one muscle five times in a row |
++| total | 25 of 45 min | the clock bought nothing |
++
++What this document asks for instead (exercise names illustrative, ids from `admissible_set`):
++
++| block | structure | rounds × reps | rest | min |
++|---|---|---|---|---|
++| hardest push-up variant reaching 8-12 | straight sets | 4 × 10 | 120 s | 10 |
++| band fly or decline push-up | straight sets | 3 × 12 | 90 s | 6.3 |
++| band curl + band triceps pushdown | superset | 3 × 12 + 12 | 90 s | 8.1 |
++| bench dips | straight sets | 3 × 10 | 90 s | 6 |
++| band hammer curl + overhead band extension | superset | 3 × 12 + 10 | 60 s | 6.3 |
++| | | | | **37 + setup** |
++
++Chest 7 working rounds, triceps 9, biceps 6, every block with a reason a coach would write.
++
++## Sources
++
++Cited from memory by the agent: **check each before relying on it.**
++
++1. Schoenfeld, Ogborn, Krieger (2017). Dose-response relationship between weekly resistance training volume and increases in muscle mass. *J Sports Sci* 35(11).
++2. Schoenfeld et al. (2016). Longer interset rest periods enhance muscle strength and hypertrophy in resistance-trained men. *J Strength Cond Res* 30(7).
++3. Refalo et al. (2023). Influence of resistance training proximity-to-failure on skeletal muscle hypertrophy. *Sports Med* 53.
++4. Schoenfeld, Grgic, Ogborn, Krieger (2017). Strength and hypertrophy adaptations between low- vs. high-load resistance training. *J Strength Cond Res* 31(12).
++5. Lopez et al. (2021). Resistance training load effects on muscle hypertrophy and strength gain. *Med Sci Sports Exerc* 53(6).
++6. Zourdos et al. (2016). Novel resistance training-specific RPE scale measuring repetitions in reserve. *J Strength Cond Res* 30(1).
++7. ACSM (2009). Progression models in resistance training for healthy adults. *Med Sci Sports Exerc* 41(3).
++8. Grgic et al. (2017). The effects of short versus long inter-set rest intervals on muscle hypertrophy. *Eur J Sport Sci* 17(8).
++9. Robbins et al. (2010). Agonist-antagonist paired set resistance training: a brief review. *J Strength Cond Res* 24(10).
++10. Weakley et al. (2017). The effects of traditional, superset, and tri-set resistance training structures on perceived intensity and physiological responses. *Eur J Appl Physiol* 117(9).
