@@ -1,0 +1,809 @@
+--- a/docs/work/10-the-mesocycle/issues/03-a-change-and-an-adaptation.md
++++ b/docs/work/10-the-mesocycle/issues/03-a-change-and-an-adaptation.md
+@@ -1,8 +1,8 @@
+ # A change and an adaptation
+ 
+-Status: ready-for-agent
++Status: needs-info
+ 
+-Blocked by: 02.
++Blocked by: 02; the user's decision on the entrance charter (below).
+ 
+ ADR-0008 item 6. A **change** (*"no more lunges"*) rewrites the mesocycle for the cycles left. An **adaptation** (*"only 30 minutes today"*, *"no dumbbells today"*) plans today's workout from the mesocycle's and leaves the mesocycle alone.
+ 
+@@ -20,6 +20,19 @@
+ - A served workout is not checked against today's exclusions: an exclusion added after acceptance is still served. An adaptation, or a change, is the answer.
+ - An adapted workout accepted for today must count as that slot's serving (the `served` table, migration 0009), or asking again serves the unadapted slot beside it.
+ 
++## Built so far
++
++- Engine: `mesocycles.record_adapted` (an adaptation is the slot's serving and takes the place of an earlier one); `record_mesocycle(changing=...)` carries the count on, and the model's `cycles` count from the current cycle.
++- Planner: `Request.starting` and `MesocycleRequest.changing` (built by `plan.adapted` / `plan.changed`), stated in the brief, written on acceptance.
++- CLI: `trainer plan --time/--equipment/--exclude/--avoid` adapts today's slot when a mesocycle serves today; `trainer plan --change ...` rewrites the active one.
++
++## Open: the entrance
++
++The handoffs `adapt_today` / `change_mesocycle` wait on two charter lines (`evals/entrance/charter.md`):
++
++- The handoffs are a closed, named list of three, with no arguments. Adding two changes a constrained item.
++- An adaptation's constraint (*30 minutes*, *no dumbbells*) must reach `Request.budget_min` / `equipment`, or the validator checks the slot's limits and not today's. With no arguments and no keyword rule, only the planner model's reading of the user's words would carry it, which moves the budget and admissibility checks onto the model.
++
+ ## References
+ 
+ - ADR-0006, ADR-0007, ADR-0008; CONTEXT.md: Change, Adaptation, Negotiation
+--- a/src/trainer/cli.py
++++ b/src/trainer/cli.py
+@@ -1189,6 +1189,13 @@
+     "repeated for as many cycles as the agent says and why. Accepted, it is "
+     "kept; nothing is prescribed until a workout is served (ADR-0008).",
+ )
++@click.option(
++    "--change",
++    "change",
++    is_flag=True,
++    help="Rewrite the accepted mesocycle for the cycles left instead, keeping "
++    "the count already done; the other options say what changes.",
++)
+ @click.pass_context
+ def plan_command(
+     context: click.Context,
+@@ -1202,6 +1209,7 @@
+     call_budget: int,
+     record_path: Path | None,
+     mesocycle: bool,
++    change: bool,
+ ) -> None:
+     """Plan a workout, and print it.
+ 
+@@ -1213,7 +1221,9 @@
+     Any option that shapes the workout plans one instead: the groups off the
+     declared split at the position the performed workouts put it, the minutes
+     off the declared cap, and the equipment off what you declared you have.
+-    Every option below overrides one of those for today.
++    Every option below overrides one of those for today. With a mesocycle
++    serving today and no `--workout` or `--group`, that plan adapts today's
++    slot, and accepted it is that slot's serving; the mesocycle is unchanged.
+ 
+     The planner graph is asked for the plan, on the provider `LLM_BACKEND`
+     names, using the same tools `trainer mcp` serves and inside a budget of
+@@ -1228,15 +1238,21 @@
+     nothing at all: half a workout with a refusal under it reads as a workout
+     with a footnote.
+     """
+-    if mesocycle and (workout is not None or groups):
++    if change and mesocycle:
+         raise click.UsageError(
+-            "--mesocycle plans every slot of the split, so it names none: drop "
++            "--mesocycle plans a new one and --change rewrites the one accepted; give one"
++        )
++    whole = "--change" if change else "--mesocycle"
++    if (mesocycle or change) and (workout is not None or groups):
++        raise click.UsageError(
++            f"{whole} plans every slot of the split, so it names none: drop "
+             "--workout and --group"
+         )
+-    if mesocycle and source is not None:
++    if (mesocycle or change) and source is not None:
+         raise click.UsageError(
+-            "--from checks one hand-written workout; --mesocycle asks a model for every slot"
+-        )
++            f"--from checks one hand-written workout; {whole} asks a model for every slot"
++        )
++    mesocycle = mesocycle or change
+     served = not mesocycle and source is None and workout is None and budget is None
+     served = served and not (equipment or exclude or groups or avoid)
+     if source is not None or served:
+@@ -1260,11 +1276,16 @@
+         return
+     if mesocycle:
+         with _opened() as connection, reported():
+-            asked = plan.mesocycle_requested(
++            asked = (plan.changed if change else plan.mesocycle_requested)(
+                 connection,
+                 today,
+                 plan.Asked(equipment=equipment, minutes=budget, exclude=exclude, avoid=avoid),
+             )
++            if asked.changing is not None:
++                click.echo(
++                    f"changing mesocycle {asked.changing.mesocycle}, "
++                    f"in cycle {asked.changing.cycle} of {asked.changing.current.cycles}"
++                )
+             try:
+                 lines = _asked_mesocycle(connection, asked, call_budget, record_path)
+             except catalog.UnknownFilterValue as error:
+@@ -1279,21 +1300,26 @@
+             # over the cap is the more basic thing to be told about --
+             # reported the other way round, a mistyped file hides a mistyped
+             # rotation.
+-            assembled = plan.requested(
+-                connection,
+-                today,
+-                plan.Asked(
+-                    equipment=equipment,
+-                    minutes=budget,
+-                    workout=workout,
+-                    groups=groups,
+-                    exclude=exclude,
+-                    avoid=avoid,
+-                ),
++            told = plan.Asked(
++                equipment=equipment,
++                minutes=budget,
++                workout=workout,
++                groups=groups,
++                exclude=exclude,
++                avoid=avoid,
+             )
+-            request = assembled.request
+-            if assembled.rotation is not None:
+-                click.echo(_rotation(assembled.rotation, request.groups))
++            adapting = _adapting(connection, today, told, source)
++            if adapting is not None:
++                request, found = adapting
++                click.echo(
++                    f"mesocycle: adapting workout {found.slot} of {found.slots}, "
++                    f"cycle {found.cycle} of {found.cycles} -- {', '.join(request.groups)}"
++                )
++            else:
++                assembled = plan.requested(connection, today, told)
++                request = assembled.request
++                if assembled.rotation is not None:
++                    click.echo(_rotation(assembled.rotation, request.groups))
+ 
+             parsed: plan.WorkoutPlan | None = None
+             if source is not None:
+@@ -1334,6 +1360,22 @@
+             # resume, so the command is still the writer for it.
+             if parsed is not None:
+                 _recorded(connection, accepted, today)
++
++
++def _adapting(
++    connection: sqlite3.Connection, today: str, asked: plan.Asked, source: Path | None
++) -> tuple[plan.Request, mesocycles.Today] | None:
++    """Today's slot adapted to the options, or `None` when the plan is one from nothing.
++
++    From nothing when a workout or groups are named, when the plan is
++    hand-written, and when no mesocycle serves today.
++    """
++    if source is not None or asked.workout is not None or asked.groups:
++        return None
++    try:
++        return plan.adapted(connection, today, asked)
++    except (mesocycles.MesocycleError, config.NoTrainingConfig):
++        return None
+ 
+ 
+ def _rotation(where: state.Rotation, groups: tuple[str, ...]) -> str:
+--- a/src/trainer/coach/checkpoints.py
++++ b/src/trainer/coach/checkpoints.py
+@@ -44,6 +44,7 @@
+     plans.MesocycleRequest,
+     plans.MesocycleRefusal,
+     plans.Mesocycle,
++    plans.Changing,
+     logs.PerformedWorkout,
+     Exclusion,
+ )
+--- a/src/trainer/coach/planner.py
++++ b/src/trainer/coach/planner.py
+@@ -196,6 +196,14 @@
+             '{"exercise_id": "...", "why": "..."}. The field is `why`; '
+             "`reason` belongs to a block. Proposing one silently is rejected."
+         )
++    if request.starting is not None:
++        lines.append(
++            "This adapts today's workout of their mesocycle, which is:\n"
++            + request.starting.model_dump_json(indent=1)
++            + "\nIt is your starting point; the lines above are what today "
++            "allows, and what no longer fits them is yours to change. Their "
++            "mesocycle stays as it is."
++        )
+     if request.refusals:
+         lines.append(turned_down(request.refusals))
+         lines.append(
+@@ -232,6 +240,17 @@
+             "The user has said they would rather not do: "
+             + ", ".join(first.preferences)
+             + ". Leave them out, or add a row to that workout's `despite`."
++        )
++    if request.changing is not None:
++        changing = request.changing
++        lines.append(
++            f"This changes their mesocycle, which is in cycle {changing.cycle} "
++            f"of {changing.current.cycles}:\n"
++            + changing.current.model_dump_json(indent=1)
++            + "\nIt is your starting point; the lines above carry what they "
++            "asked to change. What you plan replaces it from the cycle they "
++            "are in, and the cycles you give count from that one: 1 ends it "
++            "with the current cycle."
+         )
+     if request.refusals:
+         lines.append(
+@@ -726,7 +745,9 @@
+         """
+         accepted_plan = state["plan"]
+         assert accepted_plan is not None, "nothing is written without a plan"
++        request = state["request"]
+         if isinstance(accepted_plan, plans.Mesocycle):
++            assert isinstance(request, plans.MesocycleRequest)
+             with tools.reported(), tools.opened() as connection:
+                 kept = mesocycles.record_mesocycle(
+                     connection,
+@@ -742,21 +763,31 @@
+                     cycles=accepted_plan.cycles,
+                     why=accepted_plan.why,
+                     on=date.today().isoformat(),
++                    changing=(
++                        request.changing.mesocycle if request.changing is not None else None
++                    ),
+                 )
+             return {"mesocycle": kept} | closed(
+                 {**state, "mesocycle": kept}, records.ACCEPTED
+             )
++        assert isinstance(request, plans.Request)
++        blocks = tuple(
++            workouts.PrescribedBlock(block=costed, reason=shape.reason)
++            for shape, costed in zip(
++                accepted_plan.blocks, plans.to_blocks(accepted_plan), strict=True
++            )
++        )
+         with tools.reported(), tools.opened() as connection:
+-            written = workouts.record_prescribed(
+-                connection,
+-                tuple(
+-                    workouts.PrescribedBlock(block=costed, reason=shape.reason)
+-                    for shape, costed in zip(
+-                        accepted_plan.blocks, plans.to_blocks(accepted_plan), strict=True
+-                    )
+-                ),
+-                on=date.today().isoformat(),
+-            )
++            if request.starting is not None:
++                # An adaptation is today's serving of the slot, so asking for
++                # today's workout again serves this and not the slot beside it.
++                _, written = mesocycles.record_adapted(
++                    connection, blocks, on=date.today().isoformat()
++                )
++            else:
++                written = workouts.record_prescribed(
++                    connection, blocks, on=date.today().isoformat()
++                )
+         return {"workout": written} | closed(
+             {**state, "workout": written}, records.ACCEPTED
+         )
+--- a/src/trainer/engine/mesocycles.py
++++ b/src/trainer/engine/mesocycles.py
+@@ -36,11 +36,15 @@
+     cycles: int,
+     why: str,
+     on: str,
++    changing: int | None = None,
+ ) -> int:
+     """Keep an accepted mesocycle, end the one it replaces, and return its id.
+ 
+     Each slot is checked as a plan (`duration.check_plan`) before anything is
+     written. Nothing is prescribed: that happens when a slot is served.
++
++    `changing` names the active mesocycle this one rewrites (ADR-0008 item 6):
++    its count carries on, and `cycles` counts from the cycle it is in.
+     """
+     for blocks in slots:
+         if not blocks:
+@@ -52,6 +56,15 @@
+         performed = connection.execute(
+             "SELECT COUNT(*) FROM workouts WHERE state = 'performed'"
+         ).fetchone()[0]
++        if changing is not None:
++            kept = active(connection)
++            if kept is None or kept.id != changing:
++                raise MesocycleError(
++                    f"mesocycle {changing} is no longer the active one, so there "
++                    f"is nothing to change; {ASK_FOR_ONE}"
++                )
++            cycles += (performed - kept.accepted_after) // len(slots)
++            performed = kept.accepted_after
+         connection.execute(
+             "UPDATE mesocycles SET ended_on = ? WHERE ended_on IS NULL", (on,)
+         )
+@@ -218,3 +231,36 @@
+             pass
+         raise
+     return found, workout_id
++
++
++def record_adapted(
++    connection: sqlite3.Connection, blocks: Sequence[workouts.PrescribedBlock], on: str
++) -> tuple[Today, int]:
++    """Prescribe an adaptation of today's slot as that slot's serving, and return its workout id.
++
++    The mesocycle is left as it was. A serving of the unadapted slot written
++    earlier stays a prescription, overtaken, and is no longer what is served.
++    """
++    if not blocks:
++        raise workouts.WorkoutError("a workout is at least one block")
++    duration.check_plan([prescribed.block for prescribed in blocks])
++
++    connection.execute("BEGIN IMMEDIATE")
++    try:
++        found = today(connection)
++        performed = state.rotation(connection).performed
++        workout_id = workouts.write_prescribed(connection, blocks, on)
++        connection.execute(
++            "INSERT INTO served (workout_id, mesocycle_id, slot, served_after) "
++            "VALUES (?, ?, ?, ?) ON CONFLICT (mesocycle_id, served_after) "
++            "DO UPDATE SET workout_id = excluded.workout_id",
++            (workout_id, found.mesocycle, found.slot, performed),
++        )
++        connection.execute("COMMIT")
++    except Exception:
++        try:
++            connection.execute("ROLLBACK")
++        except sqlite3.Error:
++            pass
++        raise
++    return found, workout_id
+--- a/src/trainer/plan.py
++++ b/src/trainer/plan.py
+@@ -13,7 +13,7 @@
+ 
+ from trainer.engine import admissible, budget, catalog, config, constraints, duration
+ from trainer.engine import exclusions as exclusion_state
+-from trainer.engine import state, workouts
++from trainer.engine import mesocycles, state, workouts
+ from trainer.engine.exclusions import Exclusion
+ 
+ 
+@@ -264,6 +264,18 @@
+     """Every plan this negotiation has already turned down, oldest first. The
+     new one has to differ from each of them; how is the agent's business."""
+ 
++    starting: WorkoutPlan | None = None
++    """Today's slot of the mesocycle, when this adapts it; accepted, the plan is that slot's serving."""
++
++
++@dataclass(frozen=True)
++class Changing:
++    """The active mesocycle a change rewrites, and the cycle it has reached."""
++
++    mesocycle: int
++    current: Mesocycle
++    cycle: int
++
+ 
+ @dataclass(frozen=True)
+ class MesocycleRefusal:
+@@ -280,6 +292,8 @@
+ 
+     slots: tuple[Request, ...]
+     refusals: tuple[MesocycleRefusal, ...] = ()
++    changing: Changing | None = None
++    """The mesocycle this rewrites for the cycles left, when it is a change."""
+ 
+ 
+ def mesocycle_turned_down(
+@@ -409,6 +423,42 @@
+             ).request
+             for slot in range(1, declared.cycle_length + 1)
+         )
++    )
++
++
++def adapted(
++    connection: sqlite3.Connection, today: str, asked: Asked = Asked()
++) -> tuple[Request, mesocycles.Today]:
++    """Today's request for the mesocycle's slot, with that slot's workout as the starting point.
++
++    With no mesocycle serving today, that is the state raised
++    (`mesocycles.MesocycleError`).
++    """
++    found = mesocycles.today(connection)
++    request = requested(
++        connection, today, dataclasses.replace(asked, workout=found.slot, groups=())
++    ).request
++    return dataclasses.replace(request, starting=from_prescribed(found.blocks)), found
++
++
++def changed(
++    connection: sqlite3.Connection, today: str, asked: Asked = Asked()
++) -> MesocycleRequest:
++    """A mesocycle's request that rewrites the active one for the cycles left."""
++    found = mesocycles.today(connection)
++    kept = mesocycles.active(connection)
++    assert kept is not None, "today() read a slot off it"
++    return dataclasses.replace(
++        mesocycle_requested(connection, today, asked),
++        changing=Changing(
++            mesocycle=kept.id,
++            current=Mesocycle(
++                workouts=[from_prescribed(blocks) for blocks in kept.slots],
++                cycles=kept.cycles,
++                why=kept.why,
++            ),
++            cycle=found.cycle,
++        ),
+     )
+ 
+ 
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -3982,6 +3982,104 @@
+     assert workout_rows(enriched) == []
+ 
+ 
++def test_plan_with_an_option_adapts_todays_slot_and_leaves_the_mesocycle(
++    runner: CliRunner,
++    enriched: Path,
++    declared_training: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """ADR-0008 item 6: accepted, the adaptation is what asking again serves."""
++    from test_planner import plan_of
++
++    from trainer.engine import mesocycles
++
++    kept_mesocycle(enriched, declared_training)
++    with closing(database.connect(enriched)) as connection:
++        before = mesocycles.active(connection)
++    model = scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat", rounds=2)])
++
++    result = runner.invoke(main, ["plan", "--time", "30"])
++
++    assert result.exit_code == 0, result.output
++    assert "mesocycle: adapting workout 1 of 2, cycle 1 of 3 -- legs" in result.output
++    assert "adapts today's workout" in "\n".join(m.text for m in model.seen[0])
++    with closing(database.connect(enriched)) as connection:
++        assert mesocycles.active(connection) == before
++    adapted = workout_rows(enriched)[-1]["id"]
++    no_model(monkeypatch)
++    again = runner.invoke(main, ["plan"])
++    assert f"prescribed as workout {adapted}" in again.output
++    assert len(workout_rows(enriched)) == 3
++
++
++def test_plan_naming_a_workout_plans_from_nothing_beside_the_mesocycle(
++    runner: CliRunner,
++    enriched: Path,
++    declared_training: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    from test_planner import plan_of
++
++    kept_mesocycle(enriched, declared_training)
++    model = scripted_graph(monkeypatch, documents=[plan_of("Standing_Military_Press")])
++
++    result = runner.invoke(main, ["plan", "--workout", "2"])
++
++    assert result.exit_code == 0, result.output
++    assert "adapting" not in result.output
++    assert "adapts today's workout" not in "\n".join(m.text for m in model.seen[0])
++
++
++def test_plan_change_rewrites_the_mesocycle_and_keeps_its_count(
++    runner: CliRunner,
++    enriched: Path,
++    declared_training: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    from test_planner import mesocycle_of, plan_of
++
++    from trainer.engine import mesocycles
++
++    kept_mesocycle(enriched, declared_training)
++    with closing(database.connect(enriched)) as connection:
++        first = mesocycles.active(connection)
++    offered = mesocycle_of(
++        plan_of("Barbell_Squat", rounds=2), plan_of("Standing_Military_Press", rounds=2), cycles=2
++    )
++    scripted_graph(monkeypatch, raw=[offered.model_dump_json()])
++
++    result = runner.invoke(main, ["plan", "--change", "--time", "30"])
++
++    assert result.exit_code == 0, result.output
++    assert f"changing mesocycle {first.id}, in cycle 1 of 3" in result.output  # type: ignore[union-attr]
++    with closing(database.connect(enriched)) as connection:
++        kept = mesocycles.active(connection)
++        assert kept is not None and first is not None and kept.id != first.id
++        assert kept.accepted_after == first.accepted_after
++        assert (kept.cycles, mesocycles.today(connection).cycle) == (2, 1)
++
++
++def test_plan_change_with_no_mesocycle_names_the_state_and_the_fix(
++    runner: CliRunner, enriched: Path, declared_training: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    from test_planner import LEGS_AND_SHOULDERS
++
++    declared_training.write_text(LEGS_AND_SHOULDERS, encoding="utf-8")
++    no_model(monkeypatch)
++
++    result = runner.invoke(main, ["plan", "--change", "--time", "30"])
++
++    assert result.exit_code == 1
++    assert "trainer plan --mesocycle" in result.output
++
++
++def test_plan_change_and_mesocycle_are_one_or_the_other(runner: CliRunner, enriched: Path) -> None:
++    result = runner.invoke(main, ["plan", "--change", "--mesocycle"])
++
++    assert result.exit_code == 2
++    assert "give one" in result.output
++
++
+ def test_plan_off_the_mesocycle_has_no_run_to_record(
+     runner: CliRunner, enriched: Path, tmp_path: Path
+ ) -> None:
+--- a/tests/test_logger.py
++++ b/tests/test_logger.py
+@@ -16,6 +16,7 @@
+ import textwrap
+ from collections.abc import Iterator
+ from contextlib import closing
++from datetime import date, timedelta
+ from pathlib import Path
+ from typing import Any
+ 
+@@ -516,7 +517,9 @@
+ # -- the exclusion it may propose ----------------------------------------------
+ 
+ 
+-def proposing(identifier: int, retest: str = "2026-10-15") -> Scripted:
++def proposing(identifier: int, retest: str | None = None) -> Scripted:
++    # Ahead of the real clock as well as `TODAY`: the bot's tests confirm it on today's date.
++    retest = retest or (date.today() + timedelta(days=30)).isoformat()
+     return scripted(
+         AIMessage(content="tutto chiaro"),
+         emits=report(
+@@ -536,7 +539,7 @@
+     """An exclusion is a hard boundary used only for safety, and it is
+     confirmed before it is written -- never inferred from a report."""
+     identifier = prescribe(connection)
+-    graph = graph_of(proposing(identifier))
++    graph = graph_of(proposing(identifier, retest="2099-10-15"))
+ 
+     final = graph.invoke(
+         logger.starting("la spalla tirava", TODAY, awaiting=identifier), THREAD
+@@ -546,7 +549,7 @@
+     assert waiting.value["kind"] == logger.EXCLUSION
+     assert waiting.value["value"] == "shoulder"
+     assert waiting.value["granularity"] == "joint", "the catalog decides which"
+-    assert waiting.value["retest_date"] == "2026-10-15"
++    assert waiting.value["retest_date"] == "2099-10-15"
+     assert exclusions.active(connection, TODAY) == ()
+ 
+ 
+--- a/tests/test_mesocycles.py
++++ b/tests/test_mesocycles.py
+@@ -232,6 +232,91 @@
+     assert connection.execute("SELECT COUNT(*) FROM workouts").fetchone()[0] == 2
+ 
+ 
++def test_an_adaptation_is_the_slots_serving_and_leaves_the_mesocycle(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    """ADR-0008 item 6: asked again, today's workout is the adapted one, not the slot beside it."""
++    identifier = accepted(connection)
++
++    found, adapted = mesocycles.record_adapted(connection, slot("Plank"), TODAY)
++    _, served = mesocycles.record_served(connection, TODAY)
++
++    assert found.slot == 1 and served == adapted
++    assert workouts.prescribed(connection, adapted) == slot("Plank")
++    kept = mesocycles.active(connection)
++    assert kept is not None and kept.id == identifier
++    assert kept.slots[0] == slot("Barbell_Squat")
++
++
++def test_an_adaptation_after_the_slot_was_served_takes_its_place(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    accepted(connection)
++    _, unadapted = mesocycles.record_served(connection, TODAY)
++
++    _, adapted = mesocycles.record_adapted(connection, slot("Plank"), TODAY)
++
++    assert mesocycles.record_served(connection, TODAY)[1] == adapted != unadapted
++    assert workouts.awaiting(connection) == workouts.workout(connection, adapted)
++
++
++def test_performing_an_adaptation_moves_the_rotation_on(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    accepted(connection)
++    _, adapted = mesocycles.record_adapted(connection, slot("Plank"), TODAY)
++    performed(connection, adapted)
++
++    assert mesocycles.today(connection).slot == 2
++
++
++def test_with_no_mesocycle_there_is_nothing_to_adapt(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    with pytest.raises(mesocycles.MesocycleError, match="trainer plan --mesocycle"):
++        mesocycles.record_adapted(connection, slot("Plank"), TODAY)
++    assert connection.execute("SELECT COUNT(*) FROM workouts").fetchone()[0] == 0
++
++
++def test_a_change_continues_the_cycle_count(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    """Three performed in a two-slot cycle: the change lands in cycle 2, and
++    the cycles it is given count from there."""
++    first = accepted(connection, cycles=4)
++    for _ in range(3):
++        _, served = mesocycles.record_served(connection, TODAY)
++        performed(connection, served)
++
++    changed = mesocycles.record_mesocycle(
++        connection,
++        (slot("Plank"), slot("Plank", reps=None, seconds=45)),
++        cycles=2,
++        why="no more squats",
++        on=TODAY,
++        changing=first,
++    )
++
++    found = mesocycles.today(connection)
++    assert found.mesocycle == changed != first
++    assert (found.slot, found.cycle, found.cycles) == (2, 2, 3)
++    assert found.blocks == slot("Plank", reps=None, seconds=45)
++
++
++def test_a_change_to_a_mesocycle_no_longer_active_is_a_state(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    first = accepted(connection)
++    second = accepted(connection)
++
++    with pytest.raises(mesocycles.MesocycleError, match="no longer the active one"):
++        mesocycles.record_mesocycle(
++            connection, (slot("Plank"), slot("Plank")), cycles=2, why="x", on=TODAY, changing=first
++        )
++    kept = mesocycles.active(connection)
++    assert kept is not None and kept.id == second
++
++
+ def test_a_split_that_changed_since_acceptance_is_a_state(
+     connection: sqlite3.Connection, declared_training: Path
+ ) -> None:
+--- a/tests/test_planner.py
++++ b/tests/test_planner.py
+@@ -1280,6 +1280,139 @@
+     assert f"  kept mesocycle {final['mesocycle']}" in record.summary(written)
+ 
+ 
++# -- a change and an adaptation (ADR-0008 item 6) ------------------------------
++
++
++def kept_two_slots(connection: sqlite3.Connection) -> int:
++    return mesocycles.record_mesocycle(
++        connection,
++        [
++            [
++                workouts.PrescribedBlock(block=block, reason="kept")
++                for block in plans.to_blocks(plan_of(exercise_id))
++            ]
++            for exercise_id in ("Barbell_Squat", "Standing_Military_Press")
++        ],
++        cycles=4,
++        why="settle the loads",
++        on="2026-09-22",
++    )
++
++
++def test_an_adaptation_is_briefed_with_todays_slot(
++    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
++) -> None:
++    kept_two_slots(connection)
++    request, _ = plans.adapted(connection, "2026-09-22", plans.Asked(minutes=30))
++    model = Scripted(documents=[plan_of("Barbell_Squat", rounds=2)])
++    graph, thread = pausing(model)
++
++    graph.invoke(planner.starting(request), thread)
++
++    briefed = "\n".join(message.text for message in model.seen[0])
++    assert "adapts today's workout" in briefed and "Barbell_Squat" in briefed
++    assert "Time available: 30 minutes." in briefed
++
++
++def test_an_accepted_adaptation_is_todays_serving_and_the_mesocycle_is_unchanged(
++    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
++) -> None:
++    identifier = kept_two_slots(connection)
++    before = mesocycles.active(connection)
++    request, _ = plans.adapted(connection, "2026-09-22", plans.Asked(minutes=30))
++    graph, thread = pausing(Scripted(documents=[plan_of("Barbell_Squat", rounds=2)]))
++    graph.invoke(planner.starting(request), thread)
++
++    final = graph.invoke(Command(resume=planner.accepted()), thread)
++
++    assert mesocycles.active(connection) == before
++    assert before is not None and before.id == identifier
++    _, served = mesocycles.record_served(connection, "2026-09-22")
++    assert served == final["workout"]
++    assert prescribed(connection) == [(final["workout"], "prescribed")]
++
++
++def test_an_adaptation_turned_down_is_answered_with_another(
++    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
++) -> None:
++    """ADR-0007: the next proposal must differ, and the slot still travels with it."""
++    kept_two_slots(connection)
++    request, _ = plans.adapted(connection, "2026-09-22", plans.Asked(minutes=30))
++    model = Scripted(
++        turns=[AIMessage(content="planned"), AIMessage(content="another")],
++        documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat", rounds=2)],
++    )
++    graph, thread = pausing(model)
++    graph.invoke(planner.starting(request), thread)
++
++    final = graph.invoke(Command(resume=planner.refused("troppo")), thread)
++
++    assert final["plan"] == plan_of("Barbell_Squat", rounds=2)
++    briefed = "\n".join(message.text for message in model.seen[-1])
++    assert "adapts today's workout" in briefed and "troppo" in briefed
++
++
++def test_a_change_is_briefed_with_the_active_mesocycle(
++    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
++) -> None:
++    kept_two_slots(connection)
++    request = plans.changed(connection, "2026-09-22", plans.Asked(minutes=30))
++    offered = mesocycle_of(
++        plan_of("Barbell_Squat", rounds=2), plan_of("Standing_Military_Press", rounds=2)
++    )
++    model = Scripted(raw=[offered.model_dump_json()])
++    graph, thread = pausing(model)
++
++    final = graph.invoke(planner.starting(request), thread)
++
++    assert final["plan"] == offered
++    briefed = "\n".join(message.text for message in model.seen[0])
++    assert "changes their mesocycle, which is in cycle 1 of 4" in briefed
++    assert "30 minutes" in briefed
++
++
++def test_an_accepted_change_replaces_the_mesocycle_and_keeps_its_count(
++    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
++) -> None:
++    first = kept_two_slots(connection)
++    for _ in range(2):
++        _, served = mesocycles.record_served(connection, "2026-09-22")
++        workouts.record_performed(
++            connection,
++            (
++                workouts.PerformedBlock(
++                    items=(
++                        workouts.PerformedItem(
++                            exercise_id="Barbell_Squat",
++                            unit="reps",
++                            amount=8,
++                            amount_source="reported",
++                        ),
++                    ),
++                    rounds=3,
++                    rounds_source="reported",
++                    rest=120,
++                    rest_source="reported",
++                ),
++            ),
++            on="2026-09-22",
++            report="fatto",
++            workout_id=served,
++        )
++    request = plans.changed(connection, "2026-09-22")
++    offered = mesocycle_of(
++        plan_of("Barbell_Squat", rounds=2), plan_of("Standing_Military_Press", rounds=2), cycles=2
++    )
++    graph, thread = pausing(Scripted(raw=[offered.model_dump_json()]))
++    graph.invoke(planner.starting(request), thread)
++
++    final = graph.invoke(Command(resume=planner.accepted()), thread)
++
++    found = mesocycles.today(connection)
++    assert found.mesocycle == final["mesocycle"] != first
++    assert (found.cycle, found.cycles) == (2, 3), "one cycle done, two more given"
++
++
+ def test_a_mesocycle_request_sent_as_json_is_read_as_one(
+     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+ ) -> None:
