@@ -16,13 +16,7 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 | 6 | `0.6.0` | Haiku's rate beside Sonnet's in the README, each with its intervals |
 | 8 | `0.8.0` | The repository public on GitHub, its history rewritten clean, with a README that teaches the plugin through one example |
 | 7 | `0.9.0` | REPS's drift replayed by the model that made it: with a charter, 3 of 15 episodes drift against 10 of 15, and 4 of 6 asked moves are held back against 0 of 6, in the README |
-
-## Session 9 - `0.10.0` - The evals in a repository of their own
-
-**Shows**: from a fresh clone of `skills-eval`, the tally gives the numbers the plugin's README cites; a fresh clone of `skills` holds no run, its tests pass and its links to the trials resolve.
-
-The plugin ships without 8.6 MB of trials, and the trials pin the plugin they measure.
-
+| 9 | `0.10.0` | The trials in `skills-eval`, with their history and the plugin pinned as a submodule; this repository ships without a run |
 
 ## Parked
 
