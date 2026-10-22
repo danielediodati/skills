@@ -35,7 +35,7 @@ You ask a coding agent to fix something a model in your system does wrong. It fi
 
 ## What `a4a` does
 
-Each seam gets a charter. A rule in `AGENTS.md` makes the coding agent read it before it touches the seam, and stop and ask when a request would move the line.
+Each seam gets a charter. A rule in `AGENTS.md` makes the coding agent read it before it touches the seam, make the move the user names, and ask only when a request cannot be met without moving a line it does not name.
 
 | Skill | What it does | State |
 |---|---|---|

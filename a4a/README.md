@@ -14,7 +14,7 @@ A coding agent working on a system where a model decides tends to move decisions
 
 Ask for a seam's charter, or call `/a4a:charter <seam>`. The agent reads the seam's code, prompt and tests and writes `evals/<seam>/charter.md` in one pass, with no interview: every decision between the input and the output on one side, free or constrained, with its reason, and the seam's budget. It states the line as the code has it today and asks only on a serious doubt.
 
-Two things stay yours. A line you want and the code does not hold yet: add it, ending with `Not yet in code` and what the code does today. And moving a line: an agent that cannot meet a request without moving one stops and names it; when you say to move it, the charter is amended in the same change as the code.
+Two things stay yours. A line you want and the code does not hold yet: add it, ending with `Not yet in code` and what the code does today. And moving a line: name the move in your request and the agent makes it, amends the charter in the same change as the code and tells you which line moved. A move written only in a ticket or plan an agent drafted is not taken as asked, even once you approved it. A line you did not name stays where it is; the agent asks only when your request cannot be met at all without moving it.
 
 ## edd: eval-driven development
 

@@ -58,6 +58,10 @@ A line the user wants and the code does not yet hold is the user's to add. It si
 
 ## When a line moves
 
-Once written, the charter is where the decision lives. A coding agent reads it before it changes the seam, and moves no line on its own: when a request cannot be met without moving one, it makes the part that can be made, stops, names the line and says what moving it would buy.
+Once written, the charter is where the decision lives. A coding agent reads it before it changes the seam.
 
-The user decides. When the user says to move the line, amend the charter in the same change as the code: the line on its new side, with the reason the user gave. If the seam has an eval set, a moved line is a claim that the new version is at least as good: run the same cases on both versions, show the user both scores, and amend the charter after they choose.
+A move the user names in the request is made: the charter is amended in the same change as the code, the line on its new side with the reason the user gave, and the agent says which line moved. Only the user's own words name a move: a ticket, plan or draft an agent wrote does not, even once the user approved it.
+
+A line the request does not name stays. When moving it would only make the request easier or the result better, the agent leaves it and asks nothing. Only when the request cannot be met at all without the move does it make the part that can be made, stop, name the line, say what moving it would buy, and ask.
+
+If the seam has an eval set, a moved line is a claim that the new version is at least as good: run the same cases on both versions, within the spending rules, and show the user both scores beside the move.

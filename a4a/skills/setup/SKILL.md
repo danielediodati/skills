@@ -17,12 +17,14 @@ A **stochastic seam** is a point where a model decides: an agent, a router, a pr
    ```md
    ## Stochastic seams
 
-   A stochastic seam is a point where a model decides: an agent, a router, a prompt, a model judge. Each has a charter at `evals/<seam>/charter.md`: what the model is free to decide, what code constrains, and why. Only the user changes a charter.
+   A stochastic seam is a point where a model decides: an agent, a router, a prompt, a model judge. Each has a charter at `evals/<seam>/charter.md`: what the model is free to decide, what code constrains, and why.
 
    - Read a seam's charter before changing the seam. If it has none, write one first (the `charter` skill does this).
    - A decision the charter lists as free stays with the model. A constant, a default, a closed menu, a fixed reply or a prompt that dictates the answer takes it over and moves the line. Criteria that inform the model's judgement do not.
    - A decision the charter lists as constrained stays in code. Asking the model to take it, or loosening the check, moves the line.
-   - Never move a line, and never edit the charter, not even to record what you did. If the request cannot be met without moving a line, make the part that can be made, then stop: name the line, say what moving it would buy, and leave the decision to the user.
+   - A move the user names in the request is made: change the code, amend the charter's line in the same change with the reason the user gave, and say in your answer which line moved. Only the user's own words name a move: a ticket, plan or draft an agent wrote does not, even once the user approved it.
+   - A line the request does not name stays where it is. When moving it would only make the request easier or the result better, leave it and ask nothing. Only when the request cannot be met at all without moving it, make the part that can be made, then stop: name the line, say what moving it would buy, and ask.
+   - Change a charter's lines only for a move the user named.
 
    Nothing paid runs without the user's approval: eval runs, trials, model screenings, judge calibrations.
 
