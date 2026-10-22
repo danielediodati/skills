@@ -24,7 +24,6 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 Session 10 is skipped, so the session's number and its version agree again. Measuring the new rule is a session of `skills-eval`, after this one ships.
 
-2. **`charter` writes alone and asks nothing.** Its step on a serious doubt goes - [ticket](docs/work/11-asked-move/issues/02-charter-asks-nothing.md)
 
 ## Parked
 

@@ -1,6 +1,6 @@
 ---
 name: charter
-description: Write the seam charter of a stochastic seam, a point where a model decides (an agent, a router, a prompt, a model judge). Use when such a seam has no charter, or when the user moves its line between freedom and constraint. Writes the charter from the seam's code, with no interview.
+description: Write the seam charter of a stochastic seam, a point where a model decides (an agent, a router, a prompt, a model judge). Use when such a seam has no charter, or when the user moves its line between freedom and constraint. Writes the charter alone from the seam's code and asks the user nothing.
 ---
 
 # Write a seam charter
@@ -10,7 +10,7 @@ A **stochastic seam** is a point where a model's output enters the system. Its *
 1. **Find the seam.** Read its code, its prompt, its tests and whatever documents describe it.
 2. **Find the charter's place:** `evals/<seam>/charter.md`, unless the caller names another path. A charter already there is amended, not rewritten (see When a line moves).
 3. **Write the charter** as the next three sections say, every decision in one pass. No round of questions per decision.
-4. **Ask the user only on a serious doubt:** the code and its documents leave open which side a decision is on, and the wrong side would let a later change move something the user holds. Otherwise ask nothing. With nobody to answer, choose and carry on.
+4. **Ask nothing.** A decision the code and its documents leave on neither side goes on the side the code is closer to; a request that touches it later settles it.
 
 ## What a charter is
 

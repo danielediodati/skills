@@ -7,12 +7,12 @@ A coding agent working on a system where a model decides tends to move decisions
 | Skill | When |
 |---|---|
 | `setup` | Once per project: writes the rule into `AGENTS.md` and lists the stochastic seams, with or without a charter. Call it with `/a4a:setup`. |
-| `charter` | When a seam has no charter, or you move its line between freedom and constraint. The agent writes it from the seam's code, with no interview. |
+| `charter` | When a seam has no charter, or you move its line between freedom and constraint. The agent writes it from the seam's code and asks you nothing. |
 | `edd` | When a stochastic seam changes: one change, measured on the seam's eval set, decided against the charter, the target and the best result. |
 
 ## charter: the line of a seam, written down
 
-Ask for a seam's charter, or call `/a4a:charter <seam>`. The agent reads the seam's code, prompt and tests and writes `evals/<seam>/charter.md` in one pass, with no interview: every decision between the input and the output on one side, free or constrained, with its reason, and the seam's budget. It states the line as the code has it today and asks only on a serious doubt.
+Ask for a seam's charter, or call `/a4a:charter <seam>`. The agent reads the seam's code, prompt and tests and writes `evals/<seam>/charter.md` in one pass, with no interview: every decision between the input and the output on one side, free or constrained, with its reason, and the seam's budget. It states the line as the code has it today and asks nothing: a decision the code leaves on neither side goes on the side the code is closer to, and a later request that touches it settles it.
 
 Two things stay yours. A line you want and the code does not hold yet: add it, ending with `Not yet in code` and what the code does today. And moving a line: name the move in your request and the agent makes it, amends the charter in the same change as the code and tells you which line moved. A move written only in a ticket or plan an agent drafted is not taken as asked, even once you approved it. A line you did not name stays where it is; the agent asks only when your request cannot be met at all without moving it.
 
