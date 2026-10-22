@@ -24,7 +24,6 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 Session 10 is skipped, so the session's number and its version agree again. Measuring the new rule is a session of `skills-eval`, after this one ships.
 
-3. **`edd` lets through the move the user names.** Its diff check stops only a line nobody named - [ticket](docs/work/11-asked-move/issues/03-edd-asked-move.md)
 
 ## Parked
 
