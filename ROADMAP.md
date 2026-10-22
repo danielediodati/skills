@@ -23,7 +23,6 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 The plugin ships without 8.6 MB of trials, and the trials pin the plugin they measure.
 
-2. **Split the docs by purpose.** Roadmap, open points, vocabulary and ADRs, each where it belongs - [ticket](docs/work/9-evals-repo/issues/02-split-docs.md)
 3. **Remove `trials/` from `skills`.** Links to the new repository, at a tag - [ticket](docs/work/9-evals-repo/issues/03-remove-trials.md)
 
 ## Parked

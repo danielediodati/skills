@@ -9,8 +9,7 @@ What is still undecided or undone. Decisions already taken are in `CONTEXT.md` a
 
 ## Work no ticket covers
 
-- **The plugin does not yet follow decision 15 or decision 7 as amended.** The rule `setup` writes says only the user changes a charter and the agent stops on every move; `charter` asks the user on a serious doubt. Both to rewrite, then to measure in its own session on D3, D4 and the synthetic requests where a draft stated the defect as wanted.
+- **The plugin does not yet follow decision 15 or decision 7 as amended.** The rule `setup` writes says only the user changes a charter and the agent stops on every move; `charter` asks the user on a serious doubt. Both to rewrite here; measuring the rewrite is an open point of [`skills-eval`](https://github.com/danielediodati/skills-eval/blob/main/openpoints.md).
 - **The `eval` skill**: to write. Cases, graders, judge calibration, the core and extended sets, the dev and held-out splits, the target and the eval direction now in `eval.md`. Finished only when the cases cover every line of the charter and each grader has been seen to fail an output.
 - **`setup`** does not yet copy the eval scripts or create `evals/`.
 - **A seam added during development** gets no charter by itself: `setup` lists the seams once, and the rule in `AGENTS.md` sends the agent to a charter before it changes a seam, not when it creates one.
-- **Not measured:** a draft reviewed by the user against a charter written with the user.
