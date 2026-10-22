@@ -294,7 +294,7 @@ class Spending(unittest.TestCase):
 
 
 class FirstRealUse(unittest.TestCase):
-    """What went wrong the first time the runner was used for real (trials/results-edd-demo.md)."""
+    """What went wrong the first time the runner was used for real (skills-eval, trials/results-edd-demo.md)."""
 
     def setUp(self):
         self.evals = FakeEvals([case("core-1", [True], core=True), case("core-2", [True], core=True)]

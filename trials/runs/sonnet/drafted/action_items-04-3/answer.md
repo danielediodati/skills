@@ -1,9 +1,0 @@
-I changed the prompt so the model is told to write the full listed name for short forms. I have not checked that this fixes your example, because that needs a paid model call. The local tests pass.
-
-**Cause.** Your notes say "Tom" and "Priya". The model most likely writes back "Tom", and the code only accepts the full name from the attendee list. Anything else, including a first name alone, becomes `None` while the task stays. That matches your list: the tasks arrive and the owners are missing.
-
-**Change in `seam.py`.** The `owner` instruction in the prompt now says that notes refer to people by first name or nickname ("Tom", "Tommy", "Ana R."). When that identifies someone present, the model should write that person's full name from the list, never the short form. The model still decides who took each item. I added a test to `test.py` that the prompt carries this instruction.
-
-**Not changed.** The charter makes "owner must be an attendee" a code check, and a first name alone is listed there as becoming `None`. If the model still returns "Tom" after this change, the fix would be to match a unique first name or nickname to an attendee in code. That loosens the check and moves the line, so I have not done it and the decision is yours. It would guarantee "Tom" resolves to Tom Becker. The cost is that code, not the model, would decide who "Ana R." or "Tommy" is.
-
-**Next step.** I'd like to run your 3 March notes through the real model, once or a few times, to see whether the owners now come out. Please give me a budget for that and tell me which model to use. Nothing paid has run so far.

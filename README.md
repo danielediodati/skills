@@ -21,7 +21,7 @@ Agentic engineering is building software with coding agents under engineering di
 
 - [a4a/README.md](a4a/README.md): the skills, one by one
 - [CONTEXT.md](CONTEXT.md): the vocabulary and the decisions
-- [trials/](trials/): the protocols, the raw runs and the results
+- [skills-eval](https://github.com/danielediodati/skills-eval): the protocols, the raw runs and the results, with the plugin pinned at the tag each measured
 
 ## The problem
 
@@ -41,7 +41,7 @@ Each seam gets a charter. A rule in `AGENTS.md` makes the coding agent read it b
 |---|---|---|
 | `setup` | Writes the rule into `AGENTS.md`; lists the project's seams, once. | The rule is measured; the list is a first draft, never run. |
 | `charter` | Writes a seam's charter from its code, with no interview. | Measured. |
-| `edd` | Measures one change to a seam on its eval set, and keeps or reverts it. | Early: run once ([`trials/results-edd-demo.md`](trials/results-edd-demo.md)). |
+| `edd` | Measures one change to a seam on its eval set, and keeps or reverts it. | Early: run once ([`trials/results-edd-demo.md`](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/results-edd-demo.md)). |
 
 The rule and the charter are what fights drift, and what the numbers below measure. `edd` asks another question, whether a change made the seam better.
 
@@ -49,9 +49,9 @@ Install, in Claude Code: `/plugin marketplace add danielediodati/skills`, then `
 
 ## An example
 
-The seam [`action_items`](trials/seams/action_items/): a model reads meeting notes and lists the tasks, each with its owner. Its charter, written by Sonnet 5.5 from the code, leaves the owner to the model: "the model reads who took it on, including from nicknames, first names or pronouns". The request ([`04`](trials/seams/action_items/requests/04.md)): tasks come back with no owner, because the notes say "Tom", "Tommy" or "Ana R." and not the full name.
+The seam [`action_items`](https://github.com/danielediodati/skills-eval/tree/v0.1.0/trials/seams/action_items/): a model reads meeting notes and lists the tasks, each with its owner. Its charter, written by Sonnet 5.5 from the code, leaves the owner to the model: "the model reads who took it on, including from nicknames, first names or pronouns". The request ([`04`](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/seams/action_items/requests/04.md)): tasks come back with no owner, because the notes say "Tom", "Tommy" or "Ana R." and not the full name.
 
-**Without the charter** ([run](trials/runs/sonnet/without/action_items-04-1/)), the agent wrote the reading in code: a name the model gives is matched to an attendee by prefix and initials. Drift into code, unsaid:
+**Without the charter** ([run](https://github.com/danielediodati/skills-eval/tree/v0.1.0/trials/runs/sonnet/without/action_items-04-1/)), the agent wrote the reading in code: a name the model gives is matched to an attendee by prefix and initials. Drift into code, unsaid:
 
 ```diff
 +def _resolve_owner(text: str, by_name: Dict[str, str]) -> Optional[str]:
@@ -61,7 +61,7 @@ The seam [`action_items`](trials/seams/action_items/): a model reads meeting not
 +    its start with the real name ("Tommy" for "Tom"), and initials ("Ana R.").
 ```
 
-**With the charter** ([run](trials/runs/sonnet/drafted/action_items-04-3/)), it told the model how notes name people, and left the reading to it. The line held:
+**With the charter** ([run](https://github.com/danielediodati/skills-eval/tree/v0.1.0/trials/runs/sonnet/drafted/action_items-04-3/)), it told the model how notes name people, and left the reading to it. The line held:
 
 ```diff
 +  "none" if nobody took it. The notes usually refer to people by first name
@@ -81,7 +81,7 @@ Sixteen requests on four synthetic seams, three runs each; a trial counts when t
 | Sonnet 5.5 | **32 of 48** (67%, 95% CI 53-78%) | **2 of 48** (4%, 1-14%) | Opus 5.5, user agreed on 4 of 8 |
 | Haiku 5.5 | **33 of 48** (69%, 55-80%) | **1 of 48** (2%, 0-11%) | Sonnet 5.5, user agreed on 5 of 7 |
 
-The price is stops: with the charter the agent stopped in 24 and 34 trials of 48, some on changes the user wanted. [Protocol](trials/protocol-silent-drift-3.md), [results](trials/results-silent-drift-3.md).
+The price is stops: with the charter the agent stopped in 24 and 34 trials of 48, some on changes the user wanted. [Protocol](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/protocol-silent-drift-3.md), [results](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/results-silent-drift-3.md).
 
 ### On a real project
 
@@ -102,7 +102,7 @@ REPS is a real project, built by Opus, with seams in cascade. Seven moments of i
 | D3 | toward the model, asked | 0 of 3 | 3 of 3 |
 | D4 | toward the model, asked | 0 of 3 | 1 of 3 |
 
-The charter holds the line on a real project, and the cost is the same behaviour seen from the other side: when you ask for the move, the agent often leaves it undone and asks you to move the charter's line first. Without the charter it never stopped, in 21 runs; with it, it stopped in 8 and flagged the line in 16. One project, one author, Opus 5.5 throughout (Opus 5 on E5), three runs a case: only a large effect reads at this size. [Protocol](trials/protocol-reps-replay.md), [results](trials/results-reps-replay.md).
+The charter holds the line on a real project, and the cost is the same behaviour seen from the other side: when you ask for the move, the agent often leaves it undone and asks you to move the charter's line first. Without the charter it never stopped, in 21 runs; with it, it stopped in 8 and flagged the line in 16. One project, one author, Opus 5.5 throughout (Opus 5 on E5), three runs a case: only a large effect reads at this size. [Protocol](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/protocol-reps-replay.md), [results](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/results-reps-replay.md).
 
 ## Future work
 

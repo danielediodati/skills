@@ -48,7 +48,7 @@ On the seam `triage_ticket` (a support ticket routed to a queue, with an urgency
 | 1 | the seam as it is | 1.00 | 0.82 | not met | $0.006 |
 | 2 | body cap raised from 2000 to 8000 characters | 1.00 | 0.92 | met | $0.004 |
 
-Each run was approved with its estimate and the running total; the loop stopped at the target with $0.01 spent. The one case still failing needs a line of the charter moved, so it went to the user and was not fixed. The transcript is in [`trials/results-edd-demo.md`](../trials/results-edd-demo.md).
+Each run was approved with its estimate and the running total; the loop stopped at the target with $0.01 spent. The one case still failing needs a line of the charter moved, so it went to the user and was not fixed. The transcript is in [`trials/results-edd-demo.md`](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/results-edd-demo.md).
 
 ## Install
 

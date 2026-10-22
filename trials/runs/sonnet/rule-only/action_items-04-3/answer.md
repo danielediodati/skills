@@ -1,9 +1,0 @@
-I changed the prompt so the model resolves short names to the attendee list. I did not touch the code check, and I haven't run this against a real model, so I can't yet say it fixes your example.
-
-**Cause:** the model reads "Tom looks into the venue" and, most likely, writes `Tom` as the owner. The code keeps an owner only if it matches an attendee name exactly (`seam.py:79`). `Tom` isn't `Tom Becker`, so the owner becomes `None` and the task goes to the unwatched backlog. Ana's item survived, presumably because her name was resolved properly.
-
-**Change:** the `owner` instruction in `PROMPT` (`seam.py`) now tells the model that notes use first names and nicknames ("Tom", "Tommy", "Ana R."). It must work out which person present that is and write the full name from the list, never the short form. It writes `none` if the notes don't make clear which attendee took the task. The decision about who owns a task stays with the model. I added a test that the prompt carries this guidance, and all 18 tests pass.
-
-**What the tests can't show:** the fake model in the tests returns canned answers, so they don't show that a real model now resolves "Tom" to Tom Becker. Run your 3 March notes through the real model to check.
-
-**The line I left alone:** the code only accepts an exact attendee name. If the model still occasionally writes `Tom` or `Tommy`, the owner is silently dropped. You could make the code resolve a short name when it matches exactly one attendee (a unique first name, or "Ana R." to Ana Ruiz). That would catch those slips deterministically. It would also move the line, because the code would start deciding that "Tom" means Tom Becker and would accept names the model wasn't asked to produce. That's your call; say if you want it.

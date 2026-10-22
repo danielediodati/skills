@@ -1,5 +1,0 @@
-The prompt now gives the model the meeting's weekday and a two-week calendar with rules for "by Friday", "end of next week" and "by the 10th". For your meeting, the calendar shows Friday 6 March and Friday 13 March, so Ana's quote should come out as 2026-03-06 and Tom's venue as 2026-03-13. All 18 tests pass, including a new one that checks the prompt carries the calendar and rules.
-
-What I couldn't check: the tests use a fake model, so nothing here confirms the real model picks those dates. The fix depends on the model reading the calendar correctly, and it could still get a relative date wrong. If it does, the more reliable fix is to have the model return the phrase as written ("by Friday") and have the code resolve it against the calendar, which removes the model from the date arithmetic. I can make that change if you want it.
-
-The changes are in `seam.py` (prompt, a new `_calendar` helper) and `test.py`. The project isn't a git repo, so I haven't committed anything.
