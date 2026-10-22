@@ -17,11 +17,20 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 | 8 | `0.8.0` | The repository public on GitHub, its history rewritten clean, with a README that teaches the plugin through one example |
 | 7 | `0.9.0` | REPS's drift replayed by the model that made it: with a charter, 3 of 15 episodes drift against 10 of 15, and 4 of 6 asked moves are held back against 0 of 6, in the README |
 
+## Session 9 - `0.10.0` - The evals in a repository of their own
+
+**Shows**: from a fresh clone of `skills-eval`, the tally gives the numbers the plugin's README cites; a fresh clone of `skills` holds no run, its tests pass and its links to the trials resolve.
+
+The plugin ships without 8.6 MB of trials, and the trials pin the plugin they measure.
+
+1. **Create `skills-eval`.** History extracted, the plugin as a submodule at `v0.9.0` - [ticket](docs/work/9-evals-repo/issues/01-create.md)
+2. **Split the docs by purpose.** Roadmap, open points, vocabulary and ADRs, each where it belongs - [ticket](docs/work/9-evals-repo/issues/02-split-docs.md)
+3. **Remove `trials/` from `skills`.** Links to the new repository, at a tag - [ticket](docs/work/9-evals-repo/issues/03-remove-trials.md)
+
 ## Parked
 
 No session yet.
 
-- **The evals in a repository of their own**, the synthetic seams' and REPS's, to grill before it becomes a session. The plugin ships without 7 MB of runs; the evals pin the plugin they measure, and the README points to them.
 - Hosts other than Claude Code (version 2).
 - Candidate skills: `budget`, `agent-topology`, `failure-triage`, `context-budget`.
 - The author's personal `roadmap` skill, outside this repo: support for GitHub Issues, sessions against milestones.
