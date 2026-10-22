@@ -18,6 +18,15 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 | 7 | `0.9.0` | REPS's drift replayed by the model that made it: with a charter, 3 of 15 episodes drift against 10 of 15, and 4 of 6 asked moves are held back against 0 of 6, in the README |
 | 9 | `0.10.0` | The trials in `skills-eval`, with their history and the plugin pinned as a submodule; this repository ships without a run |
 
+## Session 11 - `0.11.0` - The move the user names is made
+
+**Shows**: the rule and the `charter` skill as they ship, beside the version before, read on D4, `action_items 04` and E5: the move the user named is made and flagged, a line nobody named stays, and a move written in an approved ticket is not taken as asked.
+
+Session 10 is skipped, so the session's number and its version agree again. Measuring the new rule is a session of `skills-eval`, after this one ships.
+
+1. **The rule makes the move the user names.** Ask only when the request cannot be met without moving a line it did not name - [ticket](docs/work/11-asked-move/issues/01-setup-rule.md)
+2. **`charter` writes alone and asks nothing.** Its step on a serious doubt goes - [ticket](docs/work/11-asked-move/issues/02-charter-asks-nothing.md)
+
 ## Parked
 
 No session yet.
