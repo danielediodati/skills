@@ -20,10 +20,11 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 ## Session 11 - `0.11.0` - The move the user names is made
 
-**Shows**: the rule and the `charter` skill as they ship, beside the version before, read on D4, `action_items 04` and E5: the move the user named is made and flagged, a line nobody named stays, and a move written in an approved ticket is not taken as asked.
+**Shows**: the rule, the `charter` skill and `edd`'s diff check as they ship, beside the version before, read on D4, `action_items 04` and E5: the move the user named is made and flagged, a line nobody named stays, and a move written in an approved ticket is not taken as asked.
 
 Session 10 is skipped, so the session's number and its version agree again. Measuring the new rule is a session of `skills-eval`, after this one ships.
 
+3. **`edd` lets through the move the user names.** Its diff check stops only a line nobody named - [ticket](docs/work/11-asked-move/issues/03-edd-asked-move.md)
 
 ## Parked
 
