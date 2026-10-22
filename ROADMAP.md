@@ -17,13 +17,7 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 | 8 | `0.8.0` | The repository public on GitHub, its history rewritten clean, with a README that teaches the plugin through one example |
 | 7 | `0.9.0` | REPS's drift replayed by the model that made it: with a charter, 3 of 15 episodes drift against 10 of 15, and 4 of 6 asked moves are held back against 0 of 6, in the README |
 | 9 | `0.10.0` | The trials in `skills-eval`, with their history and the plugin pinned as a submodule; this repository ships without a run |
-
-## Session 11 - `0.11.0` - The move the user names is made
-
-**Shows**: the rule, the `charter` skill and `edd`'s diff check as they ship, beside the version before, read on D4, `action_items 04` and E5: the move the user named is made and flagged, a line nobody named stays, and a move written in an approved ticket is not taken as asked.
-
-Session 10 is skipped, so the session's number and its version agree again. Measuring the new rule is a session of `skills-eval`, after this one ships.
-
+| 11 | `0.11.0` | The rule, `charter` and `edd` on decision 15: the move the user names is made and flagged, a move only an approved ticket wrote is not, and `charter` asks nothing |
 
 ## Parked
 

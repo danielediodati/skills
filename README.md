@@ -39,7 +39,7 @@ Each seam gets a charter. A rule in `AGENTS.md` makes the coding agent read it b
 
 | Skill | What it does | State |
 |---|---|---|
-| `setup` | Writes the rule into `AGENTS.md`; lists the project's seams, once. | The rule is measured; the list is a first draft, never run. |
+| `setup` | Writes the rule into `AGENTS.md`; lists the project's seams, once. | The rule up to 0.10.0 is measured; its 0.11.0 rewrite, which makes the move the user names, is not yet. The list is a first draft, never run. |
 | `charter` | Writes a seam's charter from its code, with no interview. | Measured. |
 | `edd` | Measures one change to a seam on its eval set, and keeps or reverts it. | Early: run once ([`trials/results-edd-demo.md`](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/results-edd-demo.md)). |
 
@@ -81,7 +81,7 @@ Sixteen requests on four synthetic seams, three runs each; a trial counts when t
 | Sonnet 5.5 | **32 of 48** (67%, 95% CI 53-78%) | **2 of 48** (4%, 1-14%) | Opus 5.5, user agreed on 4 of 8 |
 | Haiku 5.5 | **33 of 48** (69%, 55-80%) | **1 of 48** (2%, 0-11%) | Sonnet 5.5, user agreed on 5 of 7 |
 
-The price is stops: with the charter the agent stopped in 24 and 34 trials of 48, some on changes the user wanted. [Protocol](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/protocol-silent-drift-3.md), [results](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/results-silent-drift-3.md).
+The price was stops: with the rule up to 0.10.0 and the charter, the agent stopped in 24 and 34 trials of 48, some on changes the user wanted. [Protocol](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/protocol-silent-drift-3.md), [results](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/results-silent-drift-3.md).
 
 ### On a real project
 
@@ -104,8 +104,11 @@ REPS is a real project, built by Opus, with seams in cascade. Seven moments of i
 
 The charter holds the line on a real project, and the cost is the same behaviour seen from the other side: when you ask for the move, the agent often leaves it undone and asks you to move the charter's line first. Without the charter it never stopped, in 21 runs; with it, it stopped in 8 and flagged the line in 16. One project, one author, Opus 5.5 throughout (Opus 5 on E5), three runs a case: only a large effect reads at this size. [Protocol](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/protocol-reps-replay.md), [results](https://github.com/danielediodati/skills-eval/blob/v0.1.0/trials/results-reps-replay.md).
 
+These numbers were measured on the rule up to 0.10.0. From 0.11.0 the rule answers their cost: a move you name in your request is made, the charter amended and the move flagged; a move written only in a ticket or plan an agent drafted is not taken as asked, even once you approved it; and the agent stops only when your request cannot be met at all without moving a line you did not name. The rewrite is not measured yet.
+
 ## Future work
 
+- Measuring the rule as rewritten in 0.11.0, in `skills-eval`: drift and asked moves made.
 - A charter for a seam added during development: `setup` lists the seams once.
 - The `eval` skill, to build a seam's eval set; it measures how good a seam is, not drift.
 - `setup` copying the eval scripts, today copied by hand.
