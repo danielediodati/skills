@@ -11,7 +11,7 @@ The plugin's protection against drift holds: `setup`, `charter` and `edd` agree 
 - Domain: `CONTEXT.md` (glossary and decisions) and `docs/adr/`. Measurements live in `skills-eval`; a measurement ticket here points to its session there and does not restate it.
 - Every grilling ticket uses `/grilling` and `/domain-modeling`.
 - Standing preferences: the user decides trajectory (what a practice does, where it lives, what it costs), questions open with a concrete example; skills state the general rule, never the cases trials found (decision 16); a change to what the skills tell an agent ships only once it is measured (`AGENTS.md`, Release); paid runs stop at 80% of the usage window.
-- This map decides. Building what it decides goes to `ROADMAP.md` as sessions.
+- This map decides: its tickets are decision tickets, questions whose answer is a decision. Building what they decide goes to `ROADMAP.md` as sessions, whose tickets are work.
 
 ## Decisions so far
 

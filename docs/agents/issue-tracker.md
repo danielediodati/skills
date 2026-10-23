@@ -40,7 +40,7 @@ Read the ticket file.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. A **map** charts the decisions toward one destination; building what it decides goes to `ROADMAP.md` as sessions.
+Used by `/wayfinder`. A **map** charts the decisions toward one destination as **decision tickets**: questions whose answer is a decision, not work to build. Building what they decide goes to `ROADMAP.md` as sessions, whose tickets are work.
 
 - **Map**: `docs/work/map-<effort>/map.md`, with the Destination, Notes, Decisions so far, Not yet specified and Out of scope sections.
 - **Child ticket**: `docs/work/map-<effort>/issues/<nn>-<slug>.md`, numbered from `01`, with the question under `## Question`. A `Type:` line holds `research`, `prototype`, `grilling` or `task`; a `Status:` line holds `open`, `claimed` or `resolved`. A map's tickets are listed by the map's directory, not in `ROADMAP.md`.
