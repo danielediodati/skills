@@ -1,6 +1,6 @@
 # Roadmap
 
-The order things get built in. [CONTEXT.md](CONTEXT.md) holds the vocabulary and the decisions; [openpoints.md](openpoints.md) holds what is still undecided.
+The order things get built in. [CONTEXT.md](CONTEXT.md) holds the vocabulary and the decisions; the map in [docs/work/map-drift-protection](docs/work/map-drift-protection/map.md) holds the decisions still open.
 
 A session is a milestone: it ends with something that can be shown. Its tickets are files under `docs/work/<session>-<name>/issues/`. A closed ticket is deleted and its line here is removed. A closed session becomes one row under *Done*; its tag keeps the details.
 
@@ -23,6 +23,7 @@ A session is a milestone: it ends with something that can be shown. Its tickets 
 
 No session yet.
 
+- The `eval` skill, and `setup` copying the eval scripts and creating `evals/`: the next map, once drift protection holds.
 - Hosts other than Claude Code (version 2).
 - Candidate skills: `budget`, `agent-topology`, `failure-triage`, `context-budget`.
 - The author's personal `roadmap` skill, outside this repo: support for GitHub Issues, sessions against milestones.
