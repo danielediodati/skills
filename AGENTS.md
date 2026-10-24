@@ -4,7 +4,7 @@
 
 ### Issue tracker
 
-Issues live in the repo, as markdown files under `docs/work/<feature>/issues/`, listed in `ROADMAP.md` under their feature and milestone. See `docs/agents/issue-tracker.md`.
+Issues live in the repo, as markdown files under `docs/work/<m>.<f>-<name>/issues/`, listed in `ROADMAP.md` under their feature and milestone, and named `<milestone>.<feature>.<ticket>`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

@@ -4,7 +4,7 @@ Label: wayfinder:map
 
 ## Destination
 
-The plugin's protection against drift holds: `setup`, `charter` and `edd` agree with each other and with `CONTEXT.md`, a seam created during development gets a charter too, and the final text, measured in `skills-eval`, holds on REPS's cases and on the synthetic seams: milestone `1.0.0` in `ROADMAP.md`. Only then does it ship.
+The plugin's protection against drift holds: `setup`, `charter` and `edd` agree with each other and with `CONTEXT.md`, a seam created during development gets a charter too, and the final text, measured in `skills-eval`, holds on REPS's cases and on the synthetic seams: milestone 12, `1.0.0`, in `ROADMAP.md`. Only then does it ship.
 
 ## Notes
 
@@ -19,7 +19,7 @@ The plugin's protection against drift holds: `setup`, `charter` and `edd` agree 
 - `ROADMAP.md` stays, for building and history; this map holds the decisions toward the destination.
 - `openpoints.md` is retired in both repositories: a question toward the destination is a ticket or fog here; one beyond it is parked in `ROADMAP.md`.
 - The rule does not name the moves agents do not see as moves, and `edd`'s diff check stops naming them: decision 16 in `CONTEXT.md`.
-- One measurement at the end: `skills-eval`'s feature `drafted-again` waits for every change to the rule and to `edd`, and measures the final text.
+- One measurement at the end: `skills-eval`'s feature 8.2 waits for every change to the rule and to `edd`, and measures the final text.
 - `v0.11.0` stays published; it is withdrawn if the measurement of 0.11.0 does not hold.
 - [Measure the rule of 0.11.0](issues/01-measure-0.11.0.md): it holds; asked moves made in 6 of 6, episodes drift in 2 of 15; E1 still drifts. `v0.11.0` stays.
 

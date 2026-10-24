@@ -2,7 +2,7 @@
 
 The order things get built in. [CONTEXT.md](CONTEXT.md) holds the vocabulary and the decisions; the map in [docs/work/map-drift-protection](docs/work/map-drift-protection/map.md) holds the decisions still open.
 
-A milestone is a release, declared before it is built, and the only thing that ships a version and a tag; a large one starts as a map. A feature is a result that can be shown, described by its spec at `docs/work/<feature>/spec.md`, and ships no tag. Its tickets are files under `docs/work/<feature>/issues/`, named `<feature>.<nn>`; a closed ticket is deleted and its line here is removed. A closed feature becomes one line under its milestone; a closed milestone becomes one row under *Done*, and its tag keeps the details.
+A milestone is a release, declared before it is built, and the only thing that ships a version and a tag; a large one starts as a map. A feature is a result that can be shown, described by its spec at `docs/work/<m>.<f>-<name>/spec.md`, and ships no tag. Milestones are numbered in order after the sessions under *Done*, features inside their milestone, tickets inside their feature: ticket `12.1.3` is the third of feature 12.1. Its tickets are files under `docs/work/<m>.<f>-<name>/issues/`; a closed ticket is deleted and its line here is removed. A closed feature becomes one line under its milestone; a closed milestone becomes one row under *Done*, and its tag keeps the details.
 
 ## Done
 
@@ -21,7 +21,7 @@ Until milestones, each row was a session: a feature and a version at once.
 | 9 | `0.10.0` | The trials in `skills-eval`, with their history and the plugin pinned as a submodule; this repository ships without a run |
 | 11 | `0.11.0` | The rule, `charter` and `edd` on decision 15: the move the user names is made and flagged, a move only an approved ticket wrote is not, and `charter` asks nothing |
 
-## Milestone `1.0.0` - Drift protection that holds
+## Milestone 12 - `1.0.0` - Drift protection that holds
 
 **Shows**: `setup`, `charter` and `edd` agreeing with each other and with `CONTEXT.md`, a seam created during development getting its charter, and the final text measured in `skills-eval` holding on REPS's cases and on the synthetic seams.
 
