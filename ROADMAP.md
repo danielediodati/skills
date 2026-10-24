@@ -2,7 +2,7 @@
 
 The order things get built in. [CONTEXT.md](CONTEXT.md) holds the vocabulary and the decisions; the map in [docs/work/map-drift-protection](docs/work/map-drift-protection/map.md) holds the decisions still open.
 
-A milestone is a release, declared before it is built, and the only thing that ships a version and a tag; a large one starts as a map. A feature is a result that can be shown, described by its spec at `docs/work/<m>.<f>-<name>/spec.md`, and ships no tag. Milestones are numbered in order after the sessions under *Done*, features inside their milestone, tickets inside their feature: ticket `12.1.3` is the third of feature 12.1. Its tickets are files under `docs/work/<m>.<f>-<name>/issues/`; a closed ticket is deleted and its line here is removed. A closed feature becomes one line under its milestone; a closed milestone becomes one row under *Done*, and its tag keeps the details.
+Milestones, features and tickets, and how they are written and numbered: [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md). A large milestone starts as a map. A closed milestone becomes one row under *Done*, and its tag keeps the details.
 
 ## Done
 
