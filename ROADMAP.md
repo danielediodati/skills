@@ -25,7 +25,9 @@ Until milestones, each row was a session: a feature and a version at once.
 
 **Shows**: `setup`, `charter` and `edd` agreeing with each other and with `CONTEXT.md`, a seam created during development getting its charter, and the final text measured in `skills-eval` holding on REPS's cases and on the synthetic seams.
 
-Its features come from the decisions of [the map](docs/work/map-drift-protection/map.md); none is specified yet.
+- `skills-eval` 12.1: the silent drift rate on the final text, the measurement this milestone ships on.
+
+Its other features come from the decisions of [the map](docs/work/map-drift-protection/map.md); none is specified yet.
 
 ## Parked
 
