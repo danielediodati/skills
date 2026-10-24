@@ -21,10 +21,10 @@ The plugin's protection against drift holds: `setup`, `charter` and `edd` agree 
 - The rule does not name the moves agents do not see as moves, and `edd`'s diff check stops naming them: decision 16 in `CONTEXT.md`.
 - One measurement at the end: `skills-eval`'s feature `drafted-again` waits for every change to the rule and to `edd`, and measures the final text.
 - `v0.11.0` stays published; it is withdrawn if the measurement of 0.11.0 does not hold.
+- [Measure the rule of 0.11.0](issues/01-measure-0.11.0.md): it holds; asked moves made in 6 of 6, episodes drift in 2 of 15; E1 still drifts. `v0.11.0` stays.
 
 ## Not yet specified
 
-- What changes if the measurement of 0.11.0 does not hold: the rule goes back to work, and how depends on where it fails.
 - The README once the protection holds, and the version it ships as.
 
 ## Out of scope
